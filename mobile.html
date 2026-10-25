@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>RVC 转音 · 手机端</title>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body { font-family:-apple-system,"Microsoft YaHei",sans-serif; background:linear-gradient(160deg,#f6f8fc,#eef1fb); min-height:100vh; padding:14px; }
+  .card { background:#fff; border-radius:16px; padding:16px; margin-bottom:12px; box-shadow:0 2px 10px rgba(70,80,140,.08); }
+  h1 { font-size:19px; color:#445; margin-bottom:4px; }
+  .sub { font-size:12px; color:#99a; margin-bottom:14px; }
+  label { display:block; font-size:13px; color:#667; margin-bottom:6px; }
+  select, input[type=number] { width:100%; padding:10px 12px; border:1.5px solid #dfe3f2; border-radius:10px; font-size:15px; background:#fff; outline:none; }
+  .upbox { border:2px dashed #c6cbe8; border-radius:14px; padding:22px 10px; text-align:center; color:#889; cursor:pointer; }
+  .upbox .big { font-size:34px; }
+  .file-info { font-size:12px; color:#556; margin-top:6px; word-break:break-all; }
+  .row2 { display:flex; gap:10px; }
+  .row2 > div { flex:1; }
+  #go { width:100%; background:linear-gradient(90deg,#ff8fb8,#e86c9f); color:#fff; border:none; border-radius:14px; padding:15px; font-size:17px; font-weight:bold; letter-spacing:2px; cursor:pointer; box-shadow:0 4px 14px rgba(232,108,159,.35); }
+  #go:disabled { opacity:.55; }
+  #status { font-size:13px; color:#667; margin-top:12px; white-space:pre-wrap; line-height:1.7; }
+  .ok { color:#2fb98d; font-weight:bold; }
+  #dl { display:none; margin-top:10px; }
+  #dl a { display:block; background:linear-gradient(90deg,#35c48e,#3aa7c9); color:#fff; text-align:center; padding:13px; border-radius:12px; text-decoration:none; font-weight:bold; }
+  .hint { font-size:11px; color:#99a; margin-top:10px; line-height:1.6; }
+  .spinner { display:inline-block; width:12px; height:12px; border:2px solid rgba(232,108,159,.3); border-top-color:#e86c9f; border-radius:50%; animation:s .8s linear infinite; vertical-align:middle; margin-right:6px; }
+  @keyframes s { to { transform:rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>🎤 RVC 声线转音</h1>
+  <div class="sub">手机上传 → 电脑转换 → 下载结果</div>
+  <div class="upbox" id="upbox">
+    <div class="big">📁</div>
+    <div>点击选择音频文件</div>
+    <div class="file-info" id="fileInfo">未选择（mp3/wav/m4a/flac/ogg）</div>
+  </div>
+  <input type="file" id="fileInput" accept="audio/*" style="display:none">
+</div>
+<div class="card">
+  <label>声线</label>
+  <select id="voiceSel"></select>
+  <div class="row2" style="margin-top:10px">
+    <div><label>音调</label><input type="number" id="pitch" value="0"></div>
+    <div><label>音高算法</label><select id="f0"><option value="rmvpe">rmvpe</option><option value="harvest">harvest(省内存)</option></select></div>
+  </div>
+</div>
+<button id="go">▶ 开始转音</button>
+<div class="card" id="statusCard" style="display:none"><div id="status"></div><div id="dl"><a id="dlLink" download>⬇️ 下载转换结果</a></div></div>
+<div class="hint">💡 手机和电脑需在同一 WiFi，或通过内网穿透在外访问。<br>电脑端：设置 → 打开"手机模式"后访问 http://__LAN_IP__:__PORT__<br>转换在电脑上跑（CPU），一条约 1-5 分钟。</div>
+
+<!-- 密码弹层 -->
+<div id="lock" style="position:fixed;inset:0;background:linear-gradient(160deg,#6a9ef5,#e86c9f);display:none;align-items:center;justify-content:center;z-index:99">
+  <div style="background:#fff;border-radius:18px;padding:26px;width:85%;max-width:340px;text-align:center">
+    <div style="font-size:40px">🔒</div>
+    <div style="font-size:16px;color:#445;margin:10px 0 16px;font-weight:bold">需要访问密码</div>
+    <input id="pw" type="password" placeholder="输入密码" style="width:100%;padding:11px;border:1.5px solid #dfe3f2;border-radius:10px;font-size:15px;text-align:center;outline:none">
+    <button id="pwGo" style="width:100%;margin-top:12px;background:linear-gradient(90deg,#8f7bf0,#e86c9f);color:#fff;border:none;border-radius:10px;padding:12px;font-size:15px;font-weight:bold">进入</button>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let audioB64 = null, audioName = '', audioExt = '';
+let timer = null, currentId = null;
+let token = localStorage.getItem('rvc_token') || '';
+
+function api(path, opts) {
+  const sep = path.includes('?') ? '&' : '?';
+  return fetch(path + (token ? sep + 't=' + encodeURIComponent(token) : ''), opts);
+}
+
+async function unlock() {
+  try {
+    const r = await fetch('/api/auth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: $('pw').value.trim() }),
+    });
+    const j = await r.json();
+    if (j.ok) {
+      token = $('pw').value.trim();
+      localStorage.setItem('rvc_token', token);
+      $('lock').style.display = 'none';
+      loadVoices();
+    } else {
+      alert('密码错误');
+    }
+  } catch (e) { alert('连接失败：' + e.message); }
+}
+$('pwGo').onclick = unlock;
+$('pw').onkeydown = (e) => { if (e.key === 'Enter') unlock(); };
+
+async function loadVoices() {
+  const r = await api('/api/voices');
+  if (r.status === 401) { $('lock').style.display = 'flex'; return; }
+  const j = await r.json();
+  const sel = $('voiceSel');
+  sel.innerHTML = '';
+  (j.voices || []).forEach((v) => {
+    const o = document.createElement('option');
+    o.value = v.name; o.textContent = v.name;
+    sel.appendChild(o);
+  });
+}
+// 启动：先试无密码，401 就弹密码框
+api('/api/voices').then((r) => { if (r.status === 401) $('lock').style.display = 'flex'; else loadVoices(); });
+
+$('upbox').onclick = () => $('fileInput').click();
+$('fileInput').onchange = (e) => {
+  const f = e.target.files[0];
+  if (!f) return;
+  audioName = f.name;
+  audioExt = (f.name.split('.').pop() || 'mp3').toLowerCase();
+  const rd = new FileReader();
+  rd.onload = () => { audioB64 = rd.result.split(',')[1]; $('fileInfo').textContent = '已选择：' + f.name + '（' + (f.size / 1048576).toFixed(1) + 'MB）'; };
+  rd.readAsDataURL(f);
+};
+
+$('go').onclick = async () => {
+  if (!audioB64) { alert('请先选择音频文件'); return; }
+  const v = $('voiceSel').value;
+  if (!v) { alert('没有声线（电脑端声线包为空）'); return; }
+  const btn = $('go');
+  btn.disabled = true;
+  $('statusCard').style.display = 'block';
+  $('status').innerHTML = '<span class="spinner"></span>上传中…';
+  try {
+    const r = await api('/api/convert', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ audio: audioB64, ext: audioExt, voiceName: v, pitch: $('pitch').value || 0, f0method: $('f0').value }),
+    });
+    if (r.status === 401) { $('lock').style.display = 'flex'; btn.disabled = false; return; }
+    const j = await r.json();
+    if (j.error) { $('status').textContent = '❌ ' + j.error; btn.disabled = false; return; }
+    currentId = j.id;
+    timer = setInterval(poll, 2500);
+    poll();
+  } catch (e) {
+    $('status').textContent = '❌ 请求失败：' + e.message;
+    btn.disabled = false;
+  }
+};
+
+async function poll() {
+  if (!currentId) return;
+  try {
+    const r = await api('/api/status/' + currentId);
+    const j = await r.json();
+    if (j.status === 'done') {
+      clearInterval(timer);
+      $('status').innerHTML = '<span class="ok">✅ 转换完成！</span>';
+      $('dl').style.display = 'block';
+      $('dlLink').href = '/api/result/' + currentId + '?t=' + encodeURIComponent(token);
+      $('dlLink').download = audioName.replace(/\.[^.]+$/, '') + '_' + $('voiceSel').value + '.mp3';
+      $('go').disabled = false;
+    } else if (j.status === 'error') {
+      clearInterval(timer);
+      $('status').textContent = '❌ 转换失败';
+      $('go').disabled = false;
+    } else {
+      const logs = (j.logs || []).slice(-3).join('\n');
+      $('status').innerHTML = '<span class="spinner"></span>' + (j.status === 'queued' ? '排队中…' : '转换中（电脑 CPU 推理，约 1-5 分钟）…') + (logs ? '\n' + logs : '');
+    }
+  } catch { }
+}
+</script>
+</body>
+</html>

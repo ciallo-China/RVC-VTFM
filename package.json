@@ -1,0 +1,8 @@
+{
+  "name": "CRVC-VTFM",
+  "version": "2.6.1",
+  "main": "main.js",
+  "dependencies": {
+    "7zip-bin": "^5.2.0"
+  }
+}

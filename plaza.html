@@ -1,0 +1,723 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>RVC 广场</title>
+<style>
+:root { --ac:#f26b9c; --h1:#b66cf7; --h2:#ff8fb2; }
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body { height:100%; }
+body {
+  font-family:'Microsoft YaHei','PingFang SC',system-ui,sans-serif;
+  background:linear-gradient(165deg,#fbf6fb 0%,#f2f6ff 60%,#eef4ff 100%);
+  color:#334; overflow:hidden;
+  opacity:0; transform:translateY(18px) scale(.99);
+  transition:opacity .4s ease, transform .4s cubic-bezier(.22,.61,.36,1);
+}
+body.ready { opacity:1; transform:none; }
+#app { display:flex; flex-direction:column; height:100vh; }
+
+/* ── 头部 ── */
+header {
+  padding:16px 22px 12px; display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+  background:linear-gradient(90deg,#fff8,#fff6), transparent;
+}
+header .logo { width:42px; height:42px; border-radius:12px; display:flex; align-items:center; justify-content:center;
+  font-size:22px; background:linear-gradient(135deg,var(--h1),var(--h2)); box-shadow:0 4px 12px rgba(182,108,247,.28); }
+header h1 { font-size:18px; }
+header .sub { font-size:11.5px; color:#889; margin-top:2px; }
+header .spacer { flex:1; }
+.hbtn {
+  padding:7px 14px; border-radius:9px; border:1px solid #dde3f4; background:#fff; color:#556;
+  cursor:pointer; font-size:12.5px; transition:transform .15s ease, box-shadow .15s ease, border-color .15s;
+}
+.hbtn:hover { transform:translateY(-1px); box-shadow:0 3px 10px rgba(70,80,140,.12); border-color:#c6cff0; }
+.hbtn:active { transform:translateY(0); }
+
+/* ── 标签页 ── */
+nav { display:flex; gap:4px; padding:0 22px; border-bottom:1px solid #e7ebf8; position:relative; }
+.tab {
+  padding:10px 20px; font-size:13.5px; color:#778; cursor:pointer; border:none; background:none;
+  position:relative; transition:color .2s; font-family:inherit;
+}
+.tab.act { color:var(--ac); font-weight:600; }
+.tab .ind {
+  position:absolute; left:20%; right:20%; bottom:-1px; height:3px; border-radius:3px 3px 0 0;
+  background:linear-gradient(90deg,var(--h1),var(--h2)); transform:scaleX(0); transition:transform .28s cubic-bezier(.22,.61,.36,1);
+}
+.tab.act .ind { transform:scaleX(1); }
+
+/* ── 搜索 ── */
+#searchRow { padding:12px 22px 4px; display:flex; gap:10px; align-items:center; }
+#q {
+  flex:1; max-width:340px; padding:8px 14px; border-radius:10px; border:1px solid #dde3f4;
+  font-size:13px; outline:none; transition:border-color .2s, box-shadow .2s; font-family:inherit;
+}
+#q:focus { border-color:var(--ac); box-shadow:0 0 0 3px rgba(242,107,156,.12); }
+#count { font-size:12px; color:#99a; }
+
+/* ── 内容 ── */
+main { flex:1; overflow-y:auto; padding:14px 22px 24px; }
+#voiceGrid { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
+#pager { display:flex; align-items:center; gap:8px; }
+.pgbtn { padding:5px 12px; border:1px solid #dde3f4; border-radius:8px; background:#fff; color:#556; cursor:pointer; font-size:12px; transition:transform .15s, box-shadow .15s; }
+.pgbtn:hover:not(:disabled) { transform:translateY(-1px); box-shadow:0 2px 8px rgba(70,80,140,.12); }
+.pgbtn:disabled { opacity:.4; cursor:not-allowed; }
+.pgcur { font-size:12px; color:#667; }
+.vcard {
+  background:#fff; border:1px solid #e6eaf7; border-radius:14px; overflow:hidden; cursor:default;
+  display:flex; flex-direction:column;
+  transition:transform .22s cubic-bezier(.22,.61,.36,1), box-shadow .22s ease, opacity .3s ease;
+  animation:cardIn .4s ease backwards;
+}
+.vcard:hover { transform:translateY(-4px); box-shadow:0 10px 26px rgba(70,80,140,.14); }
+@keyframes cardIn { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:none; } }
+.vcard .cov { height:132px; background:linear-gradient(135deg,#e9e2f7,#dce6fb); position:relative; overflow:hidden; }
+.vcard .cov img { width:100%; height:100%; object-fit:contain; display:block; }
+.vcard .cov .tag {
+  position:absolute; top:8px; left:8px; padding:2px 8px; border-radius:7px; font-size:10.5px; color:#fff;
+  background:rgba(40,50,80,.55); backdrop-filter:blur(4px);
+}
+.vcard .cov .tag.off { background:linear-gradient(90deg,var(--h1),var(--h2)); }
+.vcard .info { padding:10px 12px 12px; display:flex; flex-direction:column; gap:4px; flex:1; }
+.vcard .nm { font-size:13.5px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.vcard .au { font-size:11px; color:#889; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.vcard .meta { display:flex; gap:6px; align-items:center; flex-wrap:wrap; margin-top:2px; }
+.vcard .ch { font-size:10.5px; color:#7a86a8; background:#eef1fb; padding:2px 7px; border-radius:6px; }
+.vcard .sz { font-size:10.5px; color:#aab; }
+.vcard .row2 { display:flex; gap:8px; align-items:center; margin-top:auto; padding-top:8px; }
+.dbtn {
+  flex:1; padding:7px 0; border-radius:9px; border:none; cursor:pointer; font-size:12.5px;
+  background:linear-gradient(90deg,var(--h1),var(--h2)); color:#fff; font-family:inherit;
+  transition:opacity .18s, transform .12s;
+}
+.dbtn:hover { opacity:.9; }
+.dbtn:active { transform:scale(.97); }
+.dbtn:disabled { opacity:.45; cursor:not-allowed; }
+.dbtn.done { background:#e8f7ee; color:#2f9e63; }
+.pbar { height:5px; border-radius:4px; background:#eef1fb; overflow:hidden; margin-top:8px; display:none; }
+.pbar .fill { height:100%; width:0%; border-radius:4px; background:linear-gradient(90deg,var(--h1),var(--h2)); transition:width .2s linear; }
+.pbar.on { display:block; }
+
+/* ── 引擎区 ── */
+#engineBox { display:none; flex-direction:column; gap:14px; }
+#engineBox.on { display:flex; animation:fadeIn .35s ease; }
+.esec { display:flex; align-items:baseline; gap:10px; font-size:13px; font-weight:800; color:#3a3f52; letter-spacing:1px;
+  padding:2px 2px 0; border-left:3px solid var(--ac, #6a9ef5); padding-left:9px; margin-top:2px; }
+.esec .esub { font-size:11px; font-weight:400; color:#aab; letter-spacing:0; }
+#modelBox { display:none; flex-direction:column; gap:10px; }
+#modelBox.on { display:flex; animation:fadeIn .35s ease; }
+@keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+.ecard {
+  background:#fff; border:1px solid #e6eaf7; border-radius:14px; padding:16px 18px;
+  display:flex; gap:14px; align-items:center; transition:box-shadow .2s, transform .2s;
+}
+.ecard:hover { box-shadow:0 8px 22px rgba(70,80,140,.10); transform:translateY(-2px); }
+.ecard .ico { width:52px; height:52px; border-radius:13px; display:flex; align-items:center; justify-content:center; font-size:26px;
+  background:linear-gradient(135deg,#eef0fb,#e8e4fa); flex-shrink:0; }
+.ecard .emain { flex:1; min-width:0; }
+.ecard .enm { font-size:14.5px; font-weight:600; }
+.ecard .edsc { font-size:11.5px; color:#889; margin-top:3px; line-height:1.55;
+  display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.ecard .emeta { font-size:11px; color:#aab; margin-top:4px; }
+.ebtn {
+  padding:9px 22px; border-radius:10px; border:none; cursor:pointer; font-size:13px; flex-shrink:0;
+  background:linear-gradient(90deg,var(--h1),var(--h2)); color:#fff; font-family:inherit;
+  transition:opacity .18s, transform .12s;
+}
+.ebtn:hover { opacity:.9; } .ebtn:active { transform:scale(.97); }
+.ebtn:disabled { opacity:.45; cursor:not-allowed; }
+.ebtn.warn { background:linear-gradient(90deg,#f2a86b,#f26b9c); }
+.ebtn.done { background:#e8f7ee; color:#2f9e63; border-color:#bfe8d0; }
+
+/* ── toast ── */
+#toast {
+  position:fixed; left:50%; bottom:30px; transform:translate(-50%, 16px); opacity:0; pointer-events:none;
+  background:rgba(30,36,60,.92); color:#fff; padding:11px 20px; border-radius:12px; font-size:13px;
+  max-width:80%; transition:opacity .3s ease, transform .3s cubic-bezier(.22,.61,.36,1); z-index:99;
+}
+#toast.on { opacity:1; transform:translate(-50%, 0); }
+
+/* ── 加载 / 错误 ── */
+#loading { text-align:center; color:#99a; padding:70px 0; font-size:13px; }
+.err { text-align:center; color:#a63a52; padding:40px 16px; font-size:13px; line-height:1.8; }
+::-webkit-scrollbar { width:10px; }
+::-webkit-scrollbar-thumb { background:#d5dbeF; border-radius:6px; border:3px solid transparent; background-clip:content-box; }
+::-webkit-scrollbar-thumb:hover { background:#c2c9e4; border:3px solid transparent; background-clip:content-box; }
+  .pbar{display:none !important}
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="logo">🏪</div>
+    <div>
+      <h1>RVC 广场</h1>
+      <div class="sub">声线包 · 引擎资源，来自 Turing Mirror（RVC-Fabric 开源项目）</div>
+    </div>
+    <div class="spacer"></div>
+    <label style="display:flex;align-items:center;gap:5px;font-size:12px;color:#8a8f9e;margin-right:10px" title="cnb.cool 限制总带宽，线程越多单条越慢；建议 1-3">线程
+      <input id="thrInput" type="number" min="1" max="16" value="2" style="width:48px;padding:3px 5px;border:1px solid #d5d9e4;border-radius:7px;font-size:12px;text-align:center;outline:none">
+    </label>
+    <button class="hbtn" id="refreshBtn">🔄 刷新</button>
+  </header>
+
+  <nav>
+    <button class="tab act" data-t="voice">声线包<span class="ind"></span></button>
+    <button class="tab" data-t="engine">引擎<span class="ind"></span></button>
+    <button class="tab" data-t="models">模型库<span class="ind"></span></button>
+  </nav>
+
+  <div id="searchRow">
+    <input id="q" placeholder="搜索声线 / 作者 / 系列…" />
+    <span id="count"></span>
+    <div style="flex:1"></div>
+    <div id="pager"></div>
+  </div>
+
+  <main>
+    <div id="loading">正在加载广场数据…</div>
+    <div id="voiceGrid"></div>
+    <div id="engineBox"></div>
+    <div id="modelBox"></div>
+  </main>
+</div>
+
+<div id="dlBar" style="display:none;position:fixed;left:0;right:0;bottom:0;background:#fff;border-top:1px solid #e6ebf7;box-shadow:0 -4px 16px rgba(0,0,0,.08);z-index:9997;padding:8px 14px"><div style="display:flex;gap:18px;font-size:12px;color:#2b3552;flex-wrap:wrap;margin-bottom:6px"><span>当前任务：<b id="dlCur" style="color:#5b8cff">-</b></span><span>剩余任务：<b id="dlLeft">0</b></span><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">排队列表：<span id="dlQueueList" style="color:#9aa3bb">-</span></span></div><div style="height:6px;background:#eef1f8;border-radius:3px;overflow:hidden"><div id="dlFill" style="height:100%;width:0;background:linear-gradient(90deg,#5b8cff,#7b6cff);border-radius:3px;transition:width .2s"></div></div><div style="display:flex;gap:18px;font-size:11px;color:#889;margin-top:4px"><span>速度：<b id="dlSpeed">0</b> MB/s</span><span>进度：<b id="dlPct">0</b>%</span><span>总进度：<b id="dlTotal">0</b>%</span></div></div>
+<div id="toast"></div>
+<script>
+const $ = (id) => document.getElementById(id);
+function getThreads() {
+  const el = document.getElementById('thrInput');
+  let n = parseInt(el && el.value, 10);
+  if (!n || n < 1) n = 2;
+  if (n > 16) n = 16;
+  return n;
+}
+
+const CNB = 'https://cnb.cool/Turing-Mirror/RVC-Fabric-Releases/-/git/raw/main';
+const HB = 'https://cnb.cool/Turing-Mirror/RVC-Fabric-Releases/-/releases/download';
+
+let idx = null, voices = [], engines = [];
+let page = 0; const PER = 16;
+let busy = false, busyId = '', busyCard = null, tmpDir = '', voicesDir = '';
+// 已安装状态：编码文件 + installed.json 校验（编码只生成一次，检测始终用这套编码）
+let installed = { engines: [], models: {}, voices: [] };
+let orphanList = [];
+async function refreshStatus() {
+  try {
+    const st = await window.rpc.getState();
+    const vDir = st.voicesDir || 'C:/RVC VTFM/Voice-LP';
+    voicesDir = vDir;
+    const r = await window.rpc.assetsStatus({ known: { voicesDir: vDir } });
+    if (r && r.ok && r.data) {
+      const d = r.data;
+      installed = { voices: [], engines: [], models: {} };
+      for (const v of (d.valid || [])) {
+        if (v.type === 'voices') installed.voices.push(String(v.id));
+        else if (v.type === 'engines') installed.engines.push(String(v.id));
+        else if (v.type === 'models') installed.models[String(v.id)] = true;
+      }
+      orphanList = d.orphans || [];
+    }
+  } catch (e) { /* 忽略 */ }
+  try { await adoptOrphans(); } catch (e2) { /* 忽略 */ }
+  return installed;
+}
+// 孤儿补写：文件夹里有编码文件但配置没记录 → 去广场数据对照，对上就用原编码写回配置
+async function adoptOrphans() {
+  if (!orphanList.length) return;
+  for (const o of orphanList) {
+    let id = '', name = '';
+    if (o.type === 'voices') {
+      const v = voices.find((x) => String(x.id) === o.rel || String(x.name) === o.rel ||
+        String(o.rel).indexOf(String(x.id)) >= 0 || String(o.rel).indexOf(String(x.name)) >= 0);
+      if (v) { id = v.id; name = v.name; }
+    } else if (o.type === 'engines') {
+      const e = engines.find((x) => String(x.variant) === o.rel);
+      if (e) { id = e.variant; name = e.name; }
+    } else if (o.type === 'models') {
+      const norm = String(o.rel).replace(/\\/g, '/');
+      const m = modelList && modelList.find((x) => String(x.relpath) === norm || String(x.relpath).indexOf(norm + '/') === 0);
+      if (m) { id = m.relpath; name = m.name; }
+    }
+    if (!id) continue;
+    await window.rpc.markInstalled(o.type, id, name, o.path, o.code);
+    if (o.type === 'voices') installed.voices.push(String(id));
+    else if (o.type === 'engines') installed.engines.push(String(id));
+    else if (o.type === 'models') installed.models[String(id)] = true;
+  }
+  orphanList = [];
+}
+// 引擎变体是否已安装
+function engineInstalled(variant) {
+  try { return (installed.engines || []).indexOf(String(variant)) >= 0; } catch (e) { return false; }
+}
+
+function fmtMB(b) { return (b / 1048576).toFixed(0) + ' MB'; }
+function fmtGB(b) { return (b / 1073741824).toFixed(2) + ' GB'; }
+function fmtSize(b) { return b >= 1073741824 ? fmtGB(b) : fmtMB(b); }
+
+function toast(msg, ms) {
+  const t = $('toast');
+  t.textContent = msg;
+  t.classList.add('on');
+  clearTimeout(t._tm);
+  t._tm = setTimeout(() => t.classList.remove('on'), ms || 3200);
+}
+
+// 全局下载进度条（引擎/模型/声线通用）
+function showDlProgress() { }
+function hideDlProgress() { }
+try { window.rpc.onDownloadProgress(showDlProgress); } catch (e) { }
+
+// 下载任务栏（排队式：一次一个，先点先下）
+function renderDlBar(st) {
+  const bar = $('dlBar');
+  if (!bar) return;
+  const active = st && st.active;
+  const queue = (st && st.queue) || [];
+  const doneBytes = (st && st.doneBytes) || 0;
+  const has = !!active || queue.length > 0;
+  bar.style.display = has ? 'block' : 'none';
+  // 队列在主进程里，切换标签页不会丢任务，只禁用刷新（刷新丢按钮状态）
+  const rb = $('refreshBtn'); if (rb) rb.disabled = has;
+  if (!has) return;
+  const totalBytes = doneBytes + (active ? (active.total || 0) : 0) + queue.reduce((s, q) => s + (q.size || 0), 0);
+  const totalPct = totalBytes ? Math.round((doneBytes + (active && active.total ? (active.done || 0) : 0)) / totalBytes * 100) : 0;
+  const curPct = active && active.total ? Math.min(100, Math.round(active.done / active.total * 100)) : 0;
+  const speedMB = active && active.speed ? (active.speed / 1048576) : 0;
+  if ($('dlCur')) $('dlCur').textContent = active ? active.name : '-';
+  if ($('dlLeft')) $('dlLeft').textContent = queue.length + (active ? 1 : 0);
+  if ($('dlQueueList')) $('dlQueueList').textContent = queue.length ? queue.map((q, i) => (i + 1) + '.' + q.name).join('  ') : '-';
+  if ($('dlFill')) $('dlFill').style.width = curPct + '%';
+  if ($('dlSpeed')) $('dlSpeed').textContent = speedMB.toFixed(2);
+  if ($('dlPct')) $('dlPct').textContent = curPct;
+  if ($('dlTotal')) $('dlTotal').textContent = totalPct;
+}
+try { window.rpc.onQueueStatus(renderDlBar); } catch (e) { }
+
+// ── 进入动画：DOM 就绪后立刻淡入上滑 ──
+document.body.classList.add('ready');
+
+// ── 标签切换 ──
+document.querySelectorAll('.tab').forEach((tb) => {
+  tb.onclick = () => {
+    document.querySelectorAll('.tab').forEach((x) => x.classList.remove('act'));
+    tb.classList.add('act');
+    const t = tb.dataset.t;
+    const isVoice = t === 'voice', isEngine = t === 'engine', isModel = t === 'models';
+    $('voiceGrid').style.display = isVoice ? 'grid' : 'none';
+    $('searchRow').style.display = isVoice ? 'flex' : 'none';
+    $('engineBox').classList.toggle('on', isEngine);
+    $('modelBox').classList.toggle('on', isModel);
+    if (isVoice) $('voiceGrid').classList.add('in');
+    if (isModel) renderModels();
+  };
+});
+
+$('q').addEventListener('input', () => { page = 0; renderVoices(); });
+$('refreshBtn').onclick = () => { $('loading').style.display = 'block'; load(); };
+function goPage(n) { page = Math.max(0, n); renderVoices(); }
+
+async function load() {
+  try {
+    const urls = [CNB + '/index.json', CNB + '/catalog/online_catalog.snippet.json'];
+    const all = {};
+    idx = null;
+    for (const u of urls) {
+      try {
+        const fr = await window.rpc.plazaFetch(u);
+        if (!fr || !fr.ok) continue;
+        const j = JSON.parse(fr.text);
+        if (!idx) idx = j;
+        (j.voices || []).forEach((v) => { if (v.id && !all[v.id]) all[v.id] = v; });
+        (j.thirdparty_voices || []).forEach((v) => { if (v.id && !all[v.id]) all[v.id] = v; });
+      } catch (e2) { }
+    }
+    voices = Object.values(all).filter((v) => v.pack_url || v.pth_url);
+    if (!idx) throw new Error('两个数据源都请求失败');
+    engines = [];
+    const pk = idx.packages || {};
+    (pk.runtime || []).forEach((e) => engines.push(Object.assign({ icon: '⚙️', kind: e.variant === 'amd' ? '运行时（AMD）' : '运行时（NVIDIA）' }, e)));
+    (pk.engine_core || []).forEach((e) => engines.push(Object.assign({}, e, { icon: '🧩', kind: '引擎核心（模型 hubert/rmvpe + FFmpeg）', variant: 'core' })));
+    (pk.vbcable || []).forEach((e) => engines.push(Object.assign({}, e, { icon: '🔌', kind: '虚拟声卡 · 实时转音必备', variant: 'vbcable' })));
+    $('loading').style.display = 'none';
+    await refreshStatus();
+    renderVoices();
+    renderEngines();
+  } catch (err) {
+    $('loading').style.display = 'none';
+    $('voiceGrid').innerHTML = '<div class="err">加载广场数据失败：' + (err && err.message ? err.message : err) +
+      '<br>可能网络不通或服务器暂时不可用。<br><br>数据源：cnb.cool/Turing-Mirror/RVC-Fabric-Releases</div>';
+  }
+}
+
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+
+function renderVoices() {
+  const q = $('q').value.trim().toLowerCase();
+  const list = q ? voices.filter((v) => [v.name, v.author, v.series, v.group, v.id].some((x) => String(x || '').toLowerCase().includes(q))) : voices;
+  const totalPages = Math.max(1, Math.ceil(list.length / PER));
+  if (page >= totalPages) page = totalPages - 1;
+  if (page < 0) page = 0;
+  const cur = list.slice(page * PER, (page + 1) * PER);
+  $('count').textContent = voices.length ? ('共 ' + list.length + ' / ' + voices.length + ' 个声线') : '';
+  const pager = $('pager');
+  if (pager && totalPages > 1) {
+    pager.innerHTML = '<button class="pgbtn" ' + (page <= 0 ? 'disabled' : '') + ' onclick="goPage(' + (page - 1) + ')">‹ 上一页</button>' +
+      '<span class="pgcur">' + (page + 1) + ' / ' + totalPages + '</span>' +
+      '<button class="pgbtn" ' + (page >= totalPages - 1 ? 'disabled' : '') + ' onclick="goPage(' + (page + 1) + ')">下一页 ›</button>';
+  } else if (pager) pager.innerHTML = '';
+  const mainEl = document.querySelector('main');
+  if (mainEl) mainEl.scrollTop = 0;
+  $('voiceGrid').innerHTML = cur.map((v, i) => {
+    const off = v.fabric_official !== false;
+    const isFile = !v.pack_url && v.pth_url;
+    const img = v.cover_url ? '<img data-src="' + esc(v.cover_url) + '" alt="">' : '';
+    const series = v.series ? '<span class="ch">' + esc(v.series) + '</span>' : '';
+    const group = v.group ? '<span class="ch">' + esc(v.group) + '</span>' : '';
+    const vInst = (installed.voices || []).some((d) => String(d).indexOf(v.id) >= 0 || String(d).indexOf(v.name) >= 0);
+    return '<div class="vcard" style="animation-delay:' + Math.min(i * 16, 240) + 'ms" id="vc-' + esc(v.id) + '">' +
+      '<div class="cov">' + img + '<span class="tag' + (off ? ' off' : '') + '">' + (off ? '官方' : '社区') + '</span></div>' +
+      '<div class="info">' +
+      '<div class="nm" title="' + esc(v.name) + '">' + esc(v.name) + '</div>' +
+      '<div class="au" title="' + esc(v.author || '') + '">' + esc(v.author || '') + '</div>' +
+      '<div class="meta">' + series + group + '<span class="sz">' + fmtSize(v.size_bytes || 0) + '</span></div>' +
+      '<div class="row2"><button class="dbtn' + (vInst ? ' done' : '') + '" ' + (vInst ? 'disabled' : '') + ' onclick="dlVoice(\'' + esc(v.id) + '\')">' + (vInst ? '已安装 ✓' : '下载') + '</button></div>' +
+      '<div class="pbar" id="pb-' + esc(v.id) + '"><div class="fill"></div></div>' +
+      '</div></div>';
+  }).join('');
+  document.querySelectorAll('#voiceGrid .cov img').forEach((im) => {
+    const u = im.dataset.src;
+    if (!u) return;
+    window.rpc.plazaImg(u).then((r) => {
+      if (r && r.ok && r.data) im.src = r.data;
+      else im.style.opacity = '0';
+    }).catch(() => { im.style.opacity = '0'; });
+  });
+}
+
+// 核心引擎（模型核心 + 虚拟声卡，可共存）/ 辅助引擎（运行时，同类互斥）
+const CORE_KINDS = ['engine_core', 'vbcable'];
+function isCoreEngine(e) { return !!e && (CORE_KINDS.indexOf(e.kind) >= 0 || /core|vbcable/i.test(String(e.variant || ''))); }
+
+function renderEngines() {
+  const card = (e) => {
+    const big = e.size_bytes > 1073741824;
+    const done = engineInstalled(e.variant);
+    const idx = engines.indexOf(e);
+    return '<div class="ecard">' +
+      '<div class="ico">' + e.icon + '</div>' +
+      '<div class="emain">' +
+      '<div class="enm">' + esc(e.name) + '</div>' +
+      '<div class="edsc">' + esc(e.notes || e.kind) + '</div>' +
+      '<div class="emeta">' + e.kind + ' · 版本 ' + esc(e.version || e.released || '') + ' · ' + fmtSize(e.size_bytes || 0) + '</div>' +
+      '</div>' +
+      '<button class="ebtn' + (big ? ' warn' : '') + (done ? ' done' : '') + '" data-i="' + idx + '" ' + (done ? 'disabled' : '') + ' onclick="dlEngine(' + idx + ')">' + (done ? '已安装 ✓' : (big ? '下载（大文件）' : '下载')) + '</button>' +
+      '</div>';
+  };
+  const core = engines.filter(isCoreEngine);
+  const aux = engines.filter((e) => !isCoreEngine(e));
+  $('engineBox').innerHTML =
+    '<div class="esec">核心引擎<span class="esub">模型 / FFmpeg / 虚拟声卡，装一次即可，可共存</span></div>' +
+    core.map(card).join('') +
+    '<div class="esec">辅助引擎<span class="esub">Python 运行时，按显卡选一个</span></div>' +
+    aux.map(card).join('');
+  document.querySelectorAll('#voiceGrid .cov img').forEach((im) => {
+    const u = im.dataset.src;
+    if (!u) return;
+    window.rpc.plazaImg(u).then((r) => {
+      if (r && r.ok && r.data) im.src = r.data;
+      else im.style.opacity = '0';
+    }).catch(() => { im.style.opacity = '0'; });
+  });
+}
+
+function setBusy(id, card) {
+  busy = true; busyId = id; busyCard = card;
+}
+
+function clearBusy() {
+  busy = false; busyId = ''; busyCard = null;
+  document.querySelectorAll('.pbar').forEach((p) => { p.classList.remove('on'); });
+  try { hideDlProgress(); } catch (e) { }
+}
+
+async function dlVoice(id) {
+  const v = voices.find((x) => x.id === id);
+  if (!v) return;
+  const pb = $('pb-' + id);
+  const btn = document.querySelector('#vc-' + id + ' .dbtn');
+  setBusy(id, btn);
+  btn.disabled = true;
+  btn.textContent = '排队中…';
+  pb.classList.add('on');
+  const fill = pb.querySelector('.fill');
+
+  const state = await window.rpc.getState();
+  voicesDir = state.voicesDir || 'C:/RVC VTFM/Voice-LP';
+  const base = String(v.id).replace(/[\\/:*?"<>|]/g, '_');
+
+  // 下载进度回调
+  const onProg = (d) => {
+    if (d.total) { const pct = Math.min(100, Math.round(d.done / d.total * 100)); fill.style.width = pct + '%'; }
+    else { fill.style.width = '100%'; fill.style.opacity = '.5'; toast('已下载 ' + (d.done / 1048576).toFixed(0) + ' MB…', 1500); }
+  };
+  window.rpc.onDownloadProgress(onProg);
+
+  try {
+    if (v.pack_url) {
+      // 整包 zip：下载 → 自动解压安装
+      const pr = await window.rpc.plazaPrepare(base);
+      if (!pr || !pr.ok) throw new Error((pr && pr.msg) || '无法创建临时目录');
+      const zipPath = pr.dir + '\\' + base + '.zip';
+      const r1 = await window.rpc.mtDownload({ url: v.pack_url, savePath: zipPath, threads: getThreads(), name: v.name });
+      if (!r1.ok) throw new Error(r1.msg || '下载失败');
+      fill.style.width = '100%';
+      toast('下载完成，正在解压安装…', 5000);
+      const r2 = await window.rpc.plazaInstall(zipPath);
+      if (!r2.ok) throw new Error(r2.msg || '安装失败');
+      btn.textContent = '已安装 ✓';
+      btn.classList.add('done');
+      btn.disabled = true;
+      try { await window.rpc.markInstalled('voices', v.id, v.name, voicesDir + '\\' + r2.name); } catch (e4) { }
+      toast('「' + v.name + '」已安装到声线列表，可在主界面选择使用');
+      await refreshStatus();
+      renderVoices();
+    } else {
+      // pth + index 两文件：下载到临时文件夹 → 整文件夹安装
+      const pr2 = await window.rpc.plazaPrepare(base);
+      if (!pr2 || !pr2.ok) throw new Error((pr2 && pr2.msg) || '无法创建临时目录');
+      const dir = pr2.dir;
+      const pthName = (v.pth_url || '').split('/').pop().split('?')[0] || (base + '.pth');
+      const idxName = (v.index_url || '').split('/').pop().split('?')[0] || (base + '.index');
+      const r1 = await window.rpc.mtDownload({ url: v.pth_url, savePath: dir + '\\' + pthName, threads: getThreads(), name: v.name });
+      if (!r1.ok) throw new Error(r1.msg || '模型下载失败');
+      toast('模型已下载，正在下载索引文件…', 4000);
+      const r2 = await window.rpc.mtDownload({ url: v.index_url, savePath: dir + '\\' + idxName, threads: getThreads(), name: v.name + '（索引）' });
+      if (!r2.ok) throw new Error(r2.msg || '索引下载失败');
+      fill.style.width = '100%';
+      const r3 = await window.rpc.installVoicePack(dir);
+      if (!r3.ok) throw new Error(r3.msg || '安装失败');
+      btn.textContent = '已安装 ✓';
+      btn.classList.add('done');
+      btn.disabled = true;
+      try { await window.rpc.markInstalled('voices', v.id, v.name, voicesDir + '\\' + r3.name); } catch (e4) { }
+      toast('「' + v.name + '」已安装到声线列表');
+      await refreshStatus();
+      renderVoices();
+    }
+  } catch (err) {
+    toast('✗ ' + (err && err.message ? err.message : err), 5000);
+    try { btn.textContent = '下载'; btn.disabled = false; } catch (e5) { }
+  } finally {
+    clearBusy();
+  }
+}
+
+// 引擎互斥确认框：下载其它引擎会删掉已安装的引擎
+function confirmEngineSwap(e) {
+  return new Promise((resolve) => {
+    const ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,18,30,.45);z-index:9999;display:flex;align-items:center;justify-content:center';
+    ov.innerHTML =
+      '<div style="width:340px;background:#fff;border-radius:14px;padding:20px 20px 16px;box-shadow:0 20px 60px rgba(0,0,0,.25)">' +
+        '<div style="font-size:17px;font-weight:800;color:#e0455e;letter-spacing:1px;margin-bottom:10px">确定要下载吗</div>' +
+        '<div style="font-size:12px;color:#8a8f9e;line-height:1.7">如果需要下载其它引擎，将会自动删除已经安装好的引擎</div>' +
+        '<div style="display:flex;gap:10px;margin-top:18px">' +
+          '<button id="_ce_c" style="flex:1;background:#e0455e;color:#fff;border:none;border-radius:10px;padding:11px 0;font-size:13px;font-weight:700;cursor:pointer">取消</button>' +
+          '<button id="_ce_ok" style="flex:1;background:#fff;color:#23262f;border:1.5px solid #d5d9e4;border-radius:10px;padding:11px 0;font-size:13px;font-weight:700;cursor:pointer">确定</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(ov);
+    const done = (v) => { try { ov.remove(); } catch (e2) { } resolve(v); };
+    ov.querySelector('#_ce_c').onclick = () => done(false);
+    ov.querySelector('#_ce_ok').onclick = () => done(true);
+    ov.onclick = (ev) => { if (ev.target === ov) done(false); };
+  });
+}
+
+async function dlEngine(i) {
+  const e = engines[i];
+  if (!e) return;
+  const ebtn = document.querySelector('#engineBox .ebtn[data-i="' + i + '"]');
+  // 已安装检测 + 同类互斥（核心引擎可共存，辅助运行时只删其他运行时）
+  await refreshStatus();
+  const have = (installed.engines || []);
+  if (e.variant && have.indexOf(String(e.variant)) >= 0) {
+    toast('「' + e.name + '」已经安装过了', 3500);
+    return;
+  }
+  if (!isCoreEngine(e)) {
+    const others = have.filter((v) => v !== String(e.variant) && v !== 'core' && v !== 'vbcable');
+    if (others.length) {
+      const ok = await confirmEngineSwap(e);
+      if (!ok) return;
+      for (const v of others) {
+        const rr = await window.rpc.engineRemove(v);
+        if (!rr || !rr.ok) { toast('删除旧引擎失败：' + ((rr && rr.msg) || ''), 5000); return; }
+      }
+      installed.engines = have.filter((v) => v === 'core' || v === 'vbcable');
+      toast('已删除其他运行时，开始下载新引擎…', 4000);
+    }
+  }
+  if (e.size_bytes > 1073741824 && !confirm('「' + e.name + '」约 ' + fmtSize(e.size_bytes) + '，是超大文件，确定下载吗？')) return;
+  setBusy('eng' + i, ebtn);
+  if (ebtn) { ebtn.disabled = true; ebtn.textContent = '排队中…'; }
+  const st2 = await window.rpc.getState();
+  const engDir = st2.engineDir || 'C:/RVC VTFM/Engine';
+  const savePath = engDir + '\\' + e.name;
+  const onProg = (d) => {
+    toast('下载中 ' + (d.total ? Math.min(100, Math.round(d.done / d.total * 100)) : '…') + '%', 1500);
+    try { showDlProgress(d); } catch (err2) { }
+  };
+  window.rpc.onDownloadProgress(onProg);
+  try {
+    const r = await window.rpc.mtDownload({ url: e.url, savePath, threads: getThreads(), name: e.name });
+    if (!r.ok) throw new Error(r.msg || '下载失败');
+    toast('下载完成，正在解压安装…', 6000);
+    const r2 = await window.rpc.engineInstall(savePath, e.variant);
+    if (!r2 || !r2.ok) throw new Error((r2 && r2.msg) || '安装失败');
+    if (r2.needCore) toast('「' + e.name + '」已安装，但还缺「引擎核心」（模型 + FFmpeg），请在上面点一下引擎核心下载', 9000);
+    else if (r2.vbcable) toast('虚拟声卡已解压到 Tools\\vbcable，请进去运行 VBCABLE_Setup_x64.exe 安装（右键管理员运行）', 12000);
+    else toast('「' + e.name + '」已安装');
+    try { await window.rpc.removeFile(savePath); } catch (e7) { }
+    const _isCore = /core/i.test(String(e.variant || ''));
+    const _instPath = r2.path || (_isCore ? engDir : engDir + '\\runtimes\\' + e.variant);
+    try { await window.rpc.markInstalled('engines', e.variant, e.name, _instPath); } catch (e5) { }
+    await refreshStatus();
+    renderEngines();
+  } catch (err) {
+    toast('✗ ' + (err && err.message ? err.message : err), 5000);
+    if (ebtn) { ebtn.textContent = (e.size_bytes > 1073741824 ? '下载（大文件）' : '下载'); ebtn.disabled = false; }
+  } finally {
+    clearBusy();
+  }
+}
+
+// ── 模型库（PyMSS：人声提取 / 降噪 / 去回声 等）──
+let modelList = null;
+let curModelCat = 'all';
+async function loadModelCatalog() {
+  if (modelList) return modelList;
+  const r = await window.rpc.modelCatalog();
+  if (!r || !r.ok) throw new Error((r && r.msg) || '读取模型目录失败');
+  modelList = r.models || [];
+  return modelList;
+}
+async function renderModels() {
+  const box = $('modelBox');
+  if (!box) return;
+  box.innerHTML = '<div style="color:#889;font-size:12px">正在加载模型目录…</div>';
+  try {
+    const models = await loadModelCatalog();
+    await refreshStatus();
+    const groups = {};
+    for (const m of models) {
+      const cat = m.primary_category_cn || m.primary_category || '其它';
+      (groups[cat] = groups[cat] || []).push(m);
+    }
+    const cats = Object.keys(groups);
+    const mkBtn = (key, label, n) => '<button class="dbtn" style="' + (curModelCat === key ? 'background:var(--ac);color:#fff;border-color:var(--ac)' : '') + '" onclick="pickModelCat(\'' + String(key).replace(/'/g, '') + '\')">' + label + '（' + n + '）</button>';
+    let html = '<div style="display:flex;flex-wrap:wrap;gap:6px;margin:0 0 10px">';
+    html += mkBtn('all', '全部', models.length);
+    for (const c of cats) html += mkBtn(c, esc(c), groups[c].length);
+    html += '</div>';
+    const showCats = curModelCat === 'all' ? cats : [curModelCat];
+    for (const cat of showCats) {
+      if (!groups[cat]) continue;
+      html += '<div style="font-weight:600;color:#445;margin:8px 0 4px;font-size:13px">' + esc(cat) + '（' + groups[cat].length + '）</div>';
+      html += '<div style="display:flex;flex-direction:column;gap:6px">';
+      for (const m of groups[cat].slice(0, 200)) {
+        html += '<div style="display:flex;align-items:center;gap:8px;background:#f7f9ff;border:1px solid #e6ebf7;border-radius:8px;padding:8px 10px">' +
+          '<div style="flex:1;min-width:0"><div style="font-size:12.5px;color:#2b3552;font-weight:600;word-break:break-all">' + esc(m.name) + '</div>' +
+          '<div style="font-size:11px;color:#9aa3bb">' + esc(m.secondary_category_cn || m.secondary_category || '') + ' · ' + fmtSize(m.size_bytes || 0) + '</div></div>' +
+          '<button class="dbtn' + (installed.models && installed.models[m.relpath] ? ' done' : '') + '" ' + (installed.models && installed.models[m.relpath] ? 'disabled' : '') + ' onclick="dlModel(\'' + esc(m.relpath).replace(/'/g, '') + '\', this)">' + (installed.models && installed.models[m.relpath] ? '已安装 ✓' : '下载') + '</button></div>';
+      }
+      html += '</div>';
+    }
+    box.innerHTML = html || '<div style="color:#889;font-size:12px">目录为空</div>';
+  } catch (e) {
+    box.innerHTML = '<div style="color:#c04a63;font-size:12px">✗ ' + esc(String((e && e.message) || e)) + '</div>';
+  }
+}
+function pickModelCat(k) { curModelCat = k; renderModels(); }
+async function dlModel(relpath, btn) {
+  if (!installed.engines || !installed.engines.length) {
+    await refreshStatus();
+    if (!installed.engines || !installed.engines.length) {
+      toast('请先下载任意引擎（在「引擎」标签页）', 5000);
+      return;
+    }
+  }
+  const st = await window.rpc.getState();
+  const engDir = st.engineDir || 'C:/RVC VTFM/Engine';
+  const savePath = engDir + '\\assets\\pymss\\' + relpath.replace(/\//g, '\\');
+  setBusy('m_' + relpath, btn);
+  if (btn) { btn.disabled = true; btn.textContent = '排队中…'; }
+  window.rpc.onDownloadProgress((d) => {
+    toast('下载中 ' + (d.total ? Math.min(100, Math.round(d.done / d.total * 100)) : '…') + '%', 1500);
+    try { showDlProgress(d); } catch (err2) { }
+  });
+  try {
+    const url = 'https://huggingface.co/baicai1145/pymss/resolve/main/' + relpath;
+    const r = await window.rpc.mtDownload({ url, savePath, threads: getThreads(), name: relpath.split('/').pop() });
+    if (!r.ok) throw new Error(r.msg || '下载失败');
+    btn.textContent = '已安装 ✓';
+    btn.classList.add('done');
+    btn.disabled = true;
+    if (installed.models) installed.models[relpath] = true;
+    const _mrel = relpath.replace(/\//g, '\\').replace(/\\[^\\]+$/, '');
+    try { await window.rpc.markInstalled('models', relpath, relpath, engDir + '\\assets\\pymss' + (_mrel ? '\\' + _mrel : '')); } catch (e6) { }
+    toast('已下载到：' + savePath, 6000);
+    await refreshStatus();
+    renderModels();
+  } catch (err) {
+    toast('✗ ' + (err && err.message ? err.message : err), 5000);
+    if (btn) { btn.textContent = '下载'; btn.disabled = false; }
+  } finally { clearBusy(); }
+}
+window.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') window.close(); });
+// ── 火星文（与主界面一致的乱码池）──
+const MARS_POOL =
+  '體臺灣戀愛風雲龍鳳龜齒鳥馬魚車門東長書無聽見說話讀寫歲時發現開關學習問答題國語歷史戰爭經濟環境醫療藝術音樂電影' +
+  '的了在是有我你他她它' + 'ABCXYZabcxyz' +
+  'あいうえおかきくけこさしすせそたちつてとアイウエオカキクケコサシスセソ' +
+  'АБВГДЕЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯабвгдежзийклмнопрстуфхцчшщъыьэюя' +
+  'αβγδεζηθικλμνξοπρστυφχψωصقفعكلمنهوي' +
+  '！@#￥%……&*（）{}【】；‘、：“|，。/《》？.+-*"°' +
+  '€£§¥©⁜※〆々〰『』〘〛⻱⿻≿' +
+  '⍰\uFFFD\uFFFD\uFFFD▲▲■■⍰\uFFFD\uFFFD⍰\uFFFD\uFFFD\uFFFD⍰\uFFFD';
+function marsStr(s) { return String(s).replace(/[\u4e00-\u9fff]/g, () => MARS_POOL[Math.floor(Math.random() * MARS_POOL.length)]); }
+const marsSeen = new WeakSet();
+function marsify(root) {
+  const skip = /^(SCRIPT|STYLE|TEXTAREA|INPUT|OPTION|CANVAS)$/;
+  const walk = (n) => {
+    if (n.nodeType === 3) {
+      if (marsSeen.has(n)) return;
+      if (/[\u4e00-\u9fff]/.test(n.textContent)) n.textContent = marsStr(n.textContent);
+      marsSeen.add(n);
+    } else if (n.nodeType === 1 && !skip.test(n.tagName)) { for (const c of Array.from(n.childNodes)) walk(c); }
+  };
+  walk(root || document.body);
+}
+let marsObserver = null;
+function startMars() {
+  if (marsObserver) return;
+  marsify(document.body);
+  marsObserver = new MutationObserver((muts) => {
+    for (const m of muts) {
+      for (const n of Array.from(m.addedNodes || [])) { if (n.nodeType === 1 || n.nodeType === 3) marsify(n); }
+      if (m.type === 'characterData' && m.target && !marsSeen.has(m.target)) marsify(m.target);
+    }
+  });
+  marsObserver.observe(document.body, { childList: true, subtree: true, characterData: true });
+}
+window.rpc.getState().then((st) => {
+  if (st && st.settings && st.settings.lang === 'mars') setTimeout(() => { try { startMars(); } catch (e) { } }, 200);
+}).catch(() => { });
+load();
+</script>
+</body>
+</html>

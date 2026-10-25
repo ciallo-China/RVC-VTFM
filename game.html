@@ -1,0 +1,364 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>RVC 小游戏</title>
+<style>
+html,body{margin:0;height:100%;background:#0a0a1e;color:#e6ecff;font-family:"Microsoft YaHei",sans-serif;overflow:hidden}
+#top{display:flex;align-items:center;justify-content:space-between;padding:9px 16px;background:#12122e;border-bottom:1px solid #2a2a55}
+#title{font-size:14px;font-weight:600}
+#score{color:#7fd7ff;font-size:13px;font-weight:600}
+#hint{color:#778;font-size:12px}
+#wrap{position:absolute;left:0;right:0;top:44px;bottom:0;display:flex;align-items:center;justify-content:center;overflow:auto}
+canvas{border:1px solid #2a2a55;border-radius:6px;background:#0a0a1e}
+.btn{background:#0e2a52;color:#7fd7ff;border:1px solid #2a5a9a;border-radius:8px;padding:7px 14px;cursor:pointer;font-size:13px}
+.btn:hover{background:#123a6e}
+.cell{aspect-ratio:1;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:17px;border-radius:7px;color:#2b3a66}
+.guessbox{background:#0f1630;border:1px solid #2a2a55;border-radius:12px;padding:22px 28px;text-align:center;max-width:420px}
+.guessbox input{width:150px;padding:8px;border:1px solid #2a5a9a;border-radius:8px;background:#0a0a1e;color:#e6ecff;font-size:15px;text-align:center}
+.guessbox .out{color:#9fb0d8;margin:14px 0;font-size:14px;line-height:1.7}
+</style>
+</head>
+<body>
+<div id="top">
+  <div id="title">小游戏</div>
+  <div><span id="score"></span>　<span id="hint">Esc 关闭窗口</span></div>
+</div>
+<div id="wrap"><div id="stage"></div></div>
+<script src="assets/matter.min.js"></script>
+<script>
+const $ = (id) => document.getElementById(id);
+const g = new URLSearchParams(location.search).get('g') || 'snake360';
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') window.close(); });
+
+function fitCanvas(cv, W, H) {
+  const sc = Math.min(1, Math.min((innerWidth - 24) / W, (innerHeight - 68) / H));
+  cv.width = W; cv.height = H;
+  cv.style.width = (W * sc) + 'px'; cv.style.height = (H * sc) + 'px';
+  return cv;
+}
+
+// ════════ 360° 贪吃蛇（轨迹法重写）════════
+function snake360() {
+  $('title').textContent = '360° 贪吃蛇';
+  $('hint').textContent = '←/A 左转　→/D 右转　R 重生　Esc 退出';
+  const cv = document.createElement('canvas');
+  fitCanvas(cv, 1024, 720);
+  $('stage').appendChild(cv);
+  const ctx = cv.getContext('2d');
+  const W = 1024, H = 720, WALL = 10, GAP = 18, R = 10, MOVE = 2.3, TURN = 5.0;
+  const keys = { L: false, R: false };
+  let head = null, angle = 0, trail = [], foods = [], score = 0, alive = false, spawnT = 0;
+  function spawnFood() {
+    for (let q = 0; q < 200; q++) {
+      const fx = 40 + Math.random() * (W - 80), fy = 40 + Math.random() * (H - 80);
+      if (foods.every((f) => Math.hypot(f.x - fx, f.y - fy) >= 50)) return { x: fx, y: fy };
+    }
+    return { x: W / 2, y: H / 2 };
+  }
+  function reset() {
+    head = { x: W / 2, y: H / 2 };
+    angle = 0; score = 0; alive = true; spawnT = Date.now();
+    trail = [];
+    for (let i = 0; i < 14 * GAP; i++) trail.push({ x: W / 2 - i * 2.2, y: H / 2 });
+    foods = [spawnFood(), spawnFood(), spawnFood()];
+  }
+  function body() {
+    const pts = [head];
+    const step = Math.max(1, Math.round(GAP / (MOVE * 0.96)));
+    const maxLen = 12 + score * 2;
+    for (let k = 1; k <= maxLen; k++) {
+      const idx = trail.length - 1 - k * step;
+      if (idx < 0) break;
+      pts.push(trail[idx]);
+    }
+    return pts;
+  }
+  function step() {
+    if (!alive) return;
+    if (keys.L) angle -= TURN * 0.016;
+    if (keys.R) angle += TURN * 0.016;
+    head.x += Math.cos(angle) * MOVE * 0.96;
+    head.y += Math.sin(angle) * MOVE * 0.96;
+    trail.push({ x: head.x, y: head.y });
+    if (trail.length > 5000) trail.splice(0, 1500);
+    if (head.x - R < WALL || head.x + R > W - WALL || head.y - R < WALL || head.y + R > H - WALL) { alive = false; return; }
+    if (Date.now() - spawnT > 1500) {
+      const pts = body();
+      for (let i = 4; i < pts.length; i++) {
+        if (Math.hypot(head.x - pts[i].x, head.y - pts[i].y) < 8) { alive = false; return; }
+      }
+    }
+    for (let i = 0; i < foods.length; i++) {
+      if (Math.hypot(head.x - foods[i].x, head.y - foods[i].y) < R + 7) { score++; foods[i] = spawnFood(); }
+    }
+    $('score').textContent = '长度 ' + (12 + score);
+  }
+  function draw() {
+    ctx.fillStyle = '#0a0a1e'; ctx.fillRect(0, 0, W, H);
+    for (let i = 0; i < W; i += 40) for (let j = 0; j < H; j += 40) {
+      ctx.fillStyle = 'rgb(' + (22 + (i + j) % 40) + ',' + (30 + (i + j) % 32) + ',' + (52 + (i + j) % 24) + ')';
+      ctx.fillRect(i, j, 40, 40);
+    }
+    ctx.fillStyle = 'rgb(255,80,80)';
+    ctx.fillRect(0, 0, W, WALL); ctx.fillRect(0, H - WALL, W, WALL);
+    ctx.fillRect(0, 0, WALL, H); ctx.fillRect(W - WALL, 0, WALL, H);
+    for (const f of foods) { ctx.fillStyle = 'rgb(255,215,0)'; ctx.beginPath(); ctx.arc(f.x, f.y, 6, 0, 7); ctx.fill(); }
+    const pts = body();
+    for (let i = pts.length - 1; i >= 1; i--) {
+      const p = pts[i];
+      const gr = ctx.createRadialGradient(p.x - R * 0.35, p.y - R * 0.35, 1, p.x, p.y, R);
+      gr.addColorStop(0, 'rgba(150,215,255,.95)');
+      gr.addColorStop(0.55, 'rgb(0,150,255)');
+      gr.addColorStop(1, 'rgb(0,55,150)');
+      ctx.fillStyle = gr;
+      ctx.beginPath(); ctx.arc(p.x, p.y, R, 0, 7); ctx.fill();
+      ctx.strokeStyle = 'rgba(15,30,80,.45)'; ctx.lineWidth = 1.6; ctx.stroke();
+    }
+    const hd = pts[0];
+    const hg = ctx.createRadialGradient(hd.x - R * 0.4, hd.y - R * 0.4, 1, hd.x, hd.y, R + 3);
+    hg.addColorStop(0, 'rgba(190,240,255,1)');
+    hg.addColorStop(0.5, 'rgb(0,170,255)');
+    hg.addColorStop(1, 'rgb(0,70,170)');
+    ctx.fillStyle = hg;
+    ctx.beginPath(); ctx.arc(hd.x, hd.y, R + 3, 0, 7); ctx.fill();
+    ctx.strokeStyle = 'rgba(15,30,80,.5)'; ctx.lineWidth = 2; ctx.stroke();
+    const ex = Math.cos(angle), ey = Math.sin(angle);
+    const px = -ey, py = ex;
+    for (const side of [-1, 1]) {
+      const cx = hd.x + ex * 5 + px * side * 6.5;
+      const cy = hd.y + ey * 5 + py * side * 6.5;
+      ctx.fillStyle = '#fff';
+      ctx.beginPath(); ctx.arc(cx, cy, 4.6, 0, 7); ctx.fill();
+      ctx.fillStyle = '#101c38';
+      ctx.beginPath(); ctx.arc(cx + ex * 1.8, cy + ey * 1.8, 2.3, 0, 7); ctx.fill();
+    }
+    if (!alive) {
+      ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = 'rgb(255,90,90)'; ctx.font = 'bold 42px "Microsoft YaHei"'; ctx.textAlign = 'center';
+      ctx.fillText('游戏结束', W / 2, H / 2 - 8);
+      ctx.fillStyle = '#e6ecff'; ctx.font = '20px "Microsoft YaHei"';
+      ctx.fillText('按 R 重新开始 · 长度 ' + (12 + score), W / 2, H / 2 + 34);
+    }
+  }
+  document.addEventListener('keydown', (e) => {
+    const k = e.key || '';
+    if (k === 'ArrowLeft' || k === 'a' || k === 'A') keys.L = true;
+    else if (k === 'ArrowRight' || k === 'd' || k === 'D') keys.R = true;
+    if ((k === 'r' || k === 'R')) reset();
+  });
+  document.addEventListener('keyup', (e) => {
+    const k = e.key || '';
+    if (k === 'ArrowLeft' || k === 'a' || k === 'A') keys.L = false;
+    else if (k === 'ArrowRight' || k === 'd' || k === 'D') keys.R = false;
+  });
+  reset();
+  setInterval(() => {
+    try { step(); draw(); } catch (err) { $('score').textContent = '内部错误: ' + err.message; }
+  }, 16);
+}
+
+// ════════ 经典贪吃蛇 ════════
+function classicSnake() {
+  $('title').textContent = '贪吃蛇';
+  $('hint').textContent = '方向键控制　R 重生　Esc 退出';
+  const cv = document.createElement('canvas');
+  fitCanvas(cv, 400, 400);
+  $('stage').appendChild(cv);
+  const ctx = cv.getContext('2d');
+  const N = 20, S = 20;
+  let snake, dir, food, timer, score = 0, alive = true;
+  function place() { do { food = { x: Math.random() * N | 0, y: Math.random() * N | 0 }; } while (snake.some((s) => s.x === food.x && s.y === food.y)); }
+  function draw() {
+    ctx.fillStyle = '#0f1630'; ctx.fillRect(0, 0, 400, 400);
+    ctx.fillStyle = '#35c48e'; snake.forEach((s) => ctx.fillRect(s.x * S + 1, s.y * S + 1, S - 2, S - 2));
+    ctx.fillStyle = '#e86a8a'; ctx.fillRect(food.x * S + 1, food.y * S + 1, S - 2, S - 2);
+    $('score').textContent = '长度 ' + score;
+    if (!alive) {
+      ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(0, 0, 400, 400);
+      ctx.fillStyle = 'rgb(255,90,90)'; ctx.font = 'bold 40px "Microsoft YaHei"'; ctx.textAlign = 'center';
+      ctx.fillText('游戏结束', 200, 192);
+      ctx.fillStyle = '#e6ecff'; ctx.font = '19px "Microsoft YaHei"';
+      ctx.fillText('按 R 重新开始 · 长度 ' + score, 200, 236);
+    }
+  }
+  function step() {
+    if (!alive) return;
+    const h = { x: snake[0].x + dir.x, y: snake[0].y + dir.y };
+    if (h.x < 0 || h.y < 0 || h.x >= N || h.y >= N || snake.some((s) => s.x === h.x && s.y === h.y)) { alive = false; clearInterval(timer); draw(); return; }
+    snake.unshift(h);
+    if (h.x === food.x && h.y === food.y) { score++; place(); } else snake.pop();
+    draw();
+  }
+  function reset() {
+    snake = [{ x: 8, y: 10 }, { x: 7, y: 10 }, { x: 6, y: 10 }];
+    dir = { x: 1, y: 0 }; score = 0; alive = true;
+    place(); draw(); clearInterval(timer); timer = setInterval(step, 140);
+  }
+  document.addEventListener('keydown', (e) => {
+    const m = { ArrowUp: { x: 0, y: -1 }, ArrowDown: { x: 0, y: 1 }, ArrowLeft: { x: -1, y: 0 }, ArrowRight: { x: 1, y: 0 } }[e.key];
+    if (m && (m.x !== -dir.x || m.y !== -dir.y)) { dir = m; e.preventDefault(); }
+    if (e.key === 'r' || e.key === 'R') { e.preventDefault(); reset(); }
+  });
+  reset();
+}
+
+// ════════ 合成大西瓜 ════════
+function watermelon() {
+  $('title').textContent = '合成大西瓜';
+  $('hint').textContent = '移动鼠标瞄准，点击掉落水果，同种相撞合成更大的　R 重生　Esc 退出';
+  const cv = document.createElement('canvas');
+  fitCanvas(cv, 480, 720);
+  $('stage').appendChild(cv);
+  const ctx = cv.getContext('2d');
+  const Engine = Matter.Engine, Bodies = Matter.Bodies, World = Matter.World, Events = Matter.Events, Composite = Matter.Composite;
+  const engine = Engine.create();
+  engine.world.gravity.y = 1;
+  const W = 480, H = 720;
+  const wallL = Bodies.rectangle(-60, H / 2, 120, H * 2, { isStatic: true });
+  const wallR = Bodies.rectangle(W + 60, H / 2, 120, H * 2, { isStatic: true });
+  const floor = Bodies.rectangle(W / 2, H + 60, W * 2 + 120, 120, { isStatic: true });
+  const LEVELS = [
+    { r: 18, c: '#ff5a5a', s: 1 }, { r: 26, c: '#ffb45a', s: 2 }, { r: 34, c: '#ffe14d', s: 3 },
+    { r: 42, c: '#9be15d', s: 5 }, { r: 52, c: '#5db35d', s: 8 }, { r: 62, c: '#4da6a6', s: 12 },
+    { r: 72, c: '#4d7de0', s: 18 }, { r: 82, c: '#7b5de0', s: 25 }, { r: 92, c: '#c05de0', s: 35 },
+    { r: 105, c: '#e05d9e', s: 50 }, { r: 120, c: '#ff5d8f', s: 70 },
+  ];
+  let cur = null, score = 0, over = false, mouseX = W / 2, overCount = 0, nextLv = 0, curDropT = 0;
+  cv.addEventListener('mousemove', (e) => {
+    const r = cv.getBoundingClientRect();
+    mouseX = (e.clientX - r.left) / r.width * W;
+  });
+  function drop() {
+    if (over) { resetGame(); return; }
+    if (cur) return;
+    const lv = LEVELS[nextLv];
+    nextLv = Math.random() * 5 | 0;
+    curDropT = Date.now();
+    cur = Bodies.circle(Math.min(Math.max(mouseX, lv.r + 4), W - lv.r - 4), 42, lv.r, { restitution: 0.25, friction: 0.12, density: 0.002, level: LEVELS.indexOf(lv) });
+    World.add(engine.world, cur);
+  }
+  cv.addEventListener('mousedown', drop);
+  Events.on(engine, 'collisionStart', (ev) => {
+    for (const pair of ev.pairs) {
+      const a = pair.bodyA, b = pair.bodyB;
+      if (a.level === undefined || a.level !== b.level || a.level >= LEVELS.length - 1) continue;
+      const nx = (a.position.x + b.position.x) / 2, ny = (a.position.y + b.position.y) / 2;
+      World.remove(engine.world, [a, b]);
+      const nl = a.level + 1;
+      World.add(engine.world, Bodies.circle(nx, ny, LEVELS[nl].r, { restitution: 0.25, friction: 0.12, density: 0.002, level: nl }));
+      score += LEVELS[nl].s;
+      $('score').textContent = '得分 ' + score;
+    }
+  });
+  function resetGame() {
+    Composite.clear(engine.world, false);
+    World.add(engine.world, [wallL, wallR, floor]);
+    score = 0; over = false; overCount = 0; cur = null; nextLv = 0; curDropT = 0;
+    $('score').textContent = '得分 0';
+  }
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'r' || e.key === 'R') { e.preventDefault(); resetGame(); }
+  });
+  function drawFruit(ctx, x, y, r, lv) {
+    const L = LEVELS[lv] || LEVELS[0];
+    ctx.save();
+    ctx.translate(x, y);
+    const s = r / 60;
+    ctx.scale(s, s);
+    ctx.beginPath(); ctx.arc(0, 0, 58, 0, 7);
+    ctx.fillStyle = L.c; ctx.fill();
+    ctx.strokeStyle = 'rgba(0,0,0,.15)'; ctx.lineWidth = 3; ctx.stroke();
+    ctx.beginPath(); ctx.ellipse(-22, -24, 14, 9, -0.6, 0, 7);
+    ctx.fillStyle = 'rgba(255,255,255,.45)'; ctx.fill();
+    const D = {
+      0: function () { ctx.strokeStyle = '#7d4f2a'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(6, -46); ctx.quadraticCurveTo(26, -58, 36, -48); ctx.stroke(); },
+      1: function () { ctx.fillStyle = '#27ae60'; for (let i = -1; i <= 1; i++) { ctx.beginPath(); ctx.moveTo(i * 20, -52); ctx.lineTo(i * 20 - 14, -72); ctx.lineTo(i * 20 + 14, -72); ctx.closePath(); ctx.fill(); } ctx.fillStyle = 'rgba(255,255,255,.9)'; for (let i = 0; i < 8; i++) { ctx.beginPath(); ctx.arc(Math.cos(i / 8 * 6.283) * 34, Math.sin(i / 8 * 6.283) * 34, 3.4, 0, 7); ctx.fill(); } },
+      2: function () { ctx.fillStyle = 'rgba(255,255,255,.32)'; ctx.beginPath(); ctx.arc(18, 18, 20, 0, 7); ctx.fill(); },
+      3: function () { ctx.fillStyle = '#e67e22'; ctx.beginPath(); ctx.arc(0, -44, 7, 0, 7); ctx.fill(); ctx.fillStyle = '#27ae60'; ctx.beginPath(); ctx.ellipse(0, -50, 8, 4, 0, 0, 7); ctx.fill(); },
+      4: function () { ctx.strokeStyle = 'rgba(255,255,255,.55)'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(-16, -54); ctx.quadraticCurveTo(0, -40, 16, -54); ctx.stroke(); },
+      5: function () { ctx.fillStyle = '#dfe6a0'; ctx.beginPath(); ctx.arc(0, 0, 40, 0, 7); ctx.fill(); ctx.fillStyle = '#fffef2'; ctx.beginPath(); ctx.arc(0, 0, 12, 0, 7); ctx.fill(); ctx.fillStyle = '#3a2b20'; for (let i = 0; i < 16; i++) { ctx.beginPath(); ctx.arc(Math.cos(i / 16 * 6.283) * 29, Math.sin(i / 16 * 6.283) * 29, 2.6, 0, 7); ctx.fill(); } },
+      6: function () { ctx.fillStyle = '#27ae60'; for (let i = 0; i < 5; i++) { const a = -Math.PI / 2 + (i - 2) * 0.5; ctx.beginPath(); ctx.ellipse(Math.cos(a) * 10, -48 + Math.sin(a) * 8, 13, 5, a, 0, 7); ctx.fill(); } },
+      7: function () { ctx.strokeStyle = 'rgba(180,80,80,.6)'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(0, -52); ctx.quadraticCurveTo(8, 0, 0, 54); ctx.stroke(); },
+      8: function () { ctx.strokeStyle = 'rgba(180,120,20,.55)'; ctx.lineWidth = 4; for (let i = -1; i <= 1; i++) for (let j = -1; j <= 1; j++) { ctx.beginPath(); ctx.moveTo(i * 34, j * 34 - 9); ctx.lineTo(i * 34, j * 34 + 9); ctx.stroke(); ctx.beginPath(); ctx.moveTo(i * 34 - 9, j * 34); ctx.lineTo(i * 34 + 9, j * 34); ctx.stroke(); } ctx.fillStyle = '#27ae60'; for (let i = -1; i <= 1; i++) { ctx.beginPath(); ctx.moveTo(i * 16, -52); ctx.lineTo(i * 16 - 12, -72); ctx.lineTo(i * 16 + 12, -72); ctx.closePath(); ctx.fill(); } },
+      9: function () { ctx.fillStyle = 'rgba(0,0,0,.18)'; for (let i = 0; i < 3; i++) { const a = i / 3 * 6.283; ctx.beginPath(); ctx.arc(Math.cos(a) * 22, Math.sin(a) * 22, 4, 0, 7); ctx.fill(); } },
+      10: function () { ctx.strokeStyle = 'rgba(20,110,60,.85)'; ctx.lineWidth = 6; for (let i = -2; i <= 2; i++) { ctx.beginPath(); ctx.moveTo(i * 18, -60); ctx.quadraticCurveTo(i * 18 + 12, 0, i * 18, 60); ctx.stroke(); } },
+    };
+    if (D[lv]) D[lv]();
+    ctx.fillStyle = '#2d1b12';
+    ctx.beginPath(); ctx.arc(-16, 6, 5.5, 0, 7); ctx.fill();
+    ctx.beginPath(); ctx.arc(16, 6, 5.5, 0, 7); ctx.fill();
+    ctx.strokeStyle = '#2d1b12'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+    ctx.beginPath(); ctx.arc(0, 14, 13, 0.25, Math.PI - 0.25); ctx.stroke();
+    ctx.restore();
+  }
+  function draw() {
+    ctx.fillStyle = '#f8efdf'; ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = '#d9c9ae'; ctx.setLineDash([6, 6]); ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(0, 122); ctx.lineTo(W, 122); ctx.stroke();
+    ctx.setLineDash([]);
+    for (const b of Composite.allBodies(engine.world)) {
+      if (b.isStatic) { ctx.fillStyle = '#ccbfa5'; ctx.fillRect(b.position.x - 60, b.position.y - H, 120, H * 2); continue; }
+      drawFruit(ctx, b.position.x, b.position.y, b.circleRadius, b.level || 0);
+    }
+    if (!over) {
+      ctx.globalAlpha = 0.55;
+      drawFruit(ctx, mouseX, 42, LEVELS[nextLv].r, nextLv);
+      ctx.globalAlpha = 1;
+    }
+    if (over) {
+      ctx.fillStyle = 'rgba(0,0,0,.45)'; ctx.fillRect(0, 0, W, H);
+      ctx.fillStyle = '#fff'; ctx.font = 'bold 34px "Microsoft YaHei"'; ctx.textAlign = 'center';
+      ctx.fillText('游戏结束', W / 2, H / 2 - 10);
+      ctx.font = '18px "Microsoft YaHei"';
+      ctx.fillText('得分 ' + score + ' · 点击任意处重新开始', W / 2, H / 2 + 28);
+    }
+  }
+  Engine.run(engine);
+  setInterval(() => {
+    try {
+      if (!over) {
+        if (cur && (cur.position.y > 140 || Date.now() - curDropT > 1200)) cur = null;
+        let hit = false;
+        for (const b of Composite.allBodies(engine.world)) {
+          if (b !== cur && !b.isStatic && b.position.y > 18 && b.position.y < 115) { hit = true; break; }
+        }
+        overCount = hit ? overCount + 1 : Math.max(0, overCount - 3);
+        if (overCount > 80) { over = true; cur = null; }
+      }
+      draw();
+    } catch (err) { $('score').textContent = '内部错误: ' + err.message; }
+  }, 16);
+  resetGame();
+}
+
+// ════════ 猜数字 ════════
+function guessNumber() {
+  $('title').textContent = '猜数字';
+  $('hint').textContent = '想一个 1~999 的数　Esc 退出';
+  const host = document.createElement('div');
+  host.className = 'guessbox';
+  host.innerHTML = '<div style="font-size:15px;font-weight:600;color:#7fd7ff">猜数字</div><div class="out" id="gout">我想了一个 1~999 的数，输入你的猜测</div><div><input id="gin" type="number" placeholder="1~999"><div style="margin-top:10px;display:flex;gap:8px;justify-content:center"><button class="btn" id="ggo">猜</button><button class="btn" id="gnew">重新开始</button></div></div>';
+  $('stage').appendChild(host);
+  let secret, tries;
+  const out = $('gout');
+  const fresh = () => { secret = 1 + Math.random() * 999 | 0; tries = 0; out.textContent = '我想了一个 1~999 的数，输入你的猜测'; };
+  $('gnew').onclick = fresh;
+  $('ggo').onclick = () => {
+    const v = parseInt($('gin').value, 10);
+    if (!(v >= 1 && v <= 999)) { out.textContent = '请输入 1~999 的数字'; return; }
+    tries++;
+    out.textContent = (v === secret) ? ('中了！就是 ' + secret + '，用了 ' + tries + ' 次') : ((v < secret ? '小了' : '大了') + '（已猜 ' + tries + ' 次）');
+  };
+  document.addEventListener('keydown', (e) => { if (e.key === 'Enter') $('ggo').onclick(); });
+  fresh();
+}
+
+// ════════ 启动 ════════
+if (g === 'classic' || g === 'snake') classicSnake();
+else if (g === 'g2048' || g === 'watermelon') watermelon();
+else if (g === 'guess') guessNumber();
+else snake360();
+</script>
+</body>
+</html>

@@ -1,0 +1,2512 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>RVC 声线转音</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { height: 100%; }
+  body { font-family: "Segoe UI", "Microsoft YaHei", sans-serif; background: #ffffff; display: flex; flex-direction: column; overflow: hidden; user-select: none; transition: background .4s; }
+
+  /* ── 背景层 ── */
+  #bgImage { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; display: none; }
+  #bgVideo { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; display: none; }
+  #app { position: relative; z-index: 1; display: flex; flex-direction: column; height: 100%; }
+  /* 壁纸模式：面板背景透明度（alpha = 1 - 透明度），只改背景不动文字图标 */
+body.bg-on .panel { background: rgba(255,255,255,.20); }                  /* 选择声线 透明80% */
+body.bg-on #left > .panel:nth-child(2) { background: rgba(255,255,255,.20); }  /* 参数 透明80% */
+body.bg-on #sysPanel { background: rgba(255,255,255,.10); }               /* 系统状态 透明90% */
+body.bg-on .panel:has(#log) { background: rgba(255,255,255,.10); }        /* 运行日志外框 透明90% */
+body.bg-on #log { background: rgba(35,38,47,.05); }                       /* 日志内容区 透明95% */
+body.bg-on #drop { background: rgba(255,255,255,.10); }                   /* 拖入区 透明90% */
+body.bg-on header { background: linear-gradient(90deg, color-mix(in srgb, var(--h1) 50%, transparent) 0%, color-mix(in srgb, var(--h2) 50%, transparent) 60%, color-mix(in srgb, var(--h3) 50%, transparent) 100%); }  /* 顶栏 透明50% */
+body.bg-on #goBtn { background: linear-gradient(90deg, color-mix(in srgb, var(--ac2) 40%, transparent), color-mix(in srgb, var(--ac) 40%, transparent)); }  /* 开始转音 透明60% */
+/* 壁纸模式：面板内控件透明（透明度 80% = alpha 0.20）+ 边框同步半透明 */
+body.bg-on .vcard { opacity: .2; }
+body.bg-on .vcard.sel { opacity: .2; }
+/* 声线区滚动条透明（透明度 80%） */
+body.bg-on #voiceGrid::-webkit-scrollbar { width: 8px; background: transparent; }
+body.bg-on #voiceGrid::-webkit-scrollbar-track { background: rgba(255,255,255,.12); border-radius: 4px; }
+body.bg-on #voiceGrid::-webkit-scrollbar-thumb { background: rgba(255,255,255,.35); border-radius: 4px; }
+body.bg-on #voiceGrid::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,.55); }
+body.bg-on .vcard.sel { border-color: var(--ac); }
+body.bg-on .param input, body.bg-on .param select { background: rgba(255,255,255,.20); border-color: rgba(255,255,255,.30); }
+body.bg-on .sbtn { background: rgba(255,255,255,.20); border-color: rgba(255,255,255,.30); color: #445; }
+/* 壁纸模式下 primary 按钮保留主题色（否则白字配白底会看不见） */
+body.bg-on .sbtn.primary { background: linear-gradient(90deg, color-mix(in srgb, var(--h2) 72%, transparent), color-mix(in srgb, var(--h1) 72%, transparent)); color: #fff; border: none; }
+body.bg-on .mini-btn { background: rgba(255,255,255,.20); border-color: rgba(255,255,255,.30); }
+body.bg-on #sfRam, body.bg-on #sfCpu, body.bg-on #sfDisk { transition: width .1s ease !important; }
+
+  header { background: linear-gradient(90deg, var(--h1) 0%, var(--h2) 60%, var(--h3) 100%); padding: 13px 22px; display: flex; align-items: center; gap: 12px; box-shadow: 0 2px 12px rgba(90,100,180,.25); }
+  header .logo { width: 34px; height: 34px; border-radius: 10px; background: rgba(255,255,255,.25); display: flex; align-items: center; justify-content: center; font-size: 19px; }
+  header h1 { color: #fff; font-size: 17px; letter-spacing: 1px; }
+  .ver { color: rgba(255,255,255,.75); font-size: 11px; background: rgba(0,0,0,.15); padding: 2px 8px; border-radius: 10px; }
+  .status { margin-left: auto; display: flex; align-items: center; gap: 6px; color: #fff; font-size: 12px; background: rgba(255,255,255,.18); padding: 5px 12px; border-radius: 20px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: #5ee08a; box-shadow: 0 0 6px #5ee08a; }
+  .dot.off { background: #ff7a7a; box-shadow: 0 0 6px #ff7a7a; }
+  .hbtn { background: rgba(255,255,255,.2); border: none; color: #fff; border-radius: 9px; padding: 6px 12px; cursor: pointer; font-size: 12px; transition: .15s; }
+  .hbtn:hover { background: rgba(255,255,255,.35); }
+
+  #layout { flex: 1; display: flex; gap: 14px; padding: 14px 16px; min-height: 0; }
+  #left { width: 350px; display: flex; flex-direction: column; gap: 10px; min-height: 0; overflow-y: auto; }
+  .panel { background: #fff; border-radius: 14px; box-shadow: 0 2px 10px rgba(70,80,140,.08); padding: 12px; }
+  .anim .panel { animation: slideIn .35s ease; }
+  @keyframes slideIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  .panel h2 { font-size: 13px; color: #556; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
+
+  #voiceGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; overflow-y: auto; max-height: 300px; padding: 2px; }
+  .vcard { border: 2px solid #e8eaf2; border-radius: 12px; padding: 8px; text-align: center; cursor: pointer; background: #fafbfe; position: relative; overflow: hidden; display: flex; flex-direction: column; align-items: center; }
+  .anim .vcard { transition: all .18s; }
+  .vcard:hover { border-color: #b8c4ec; }
+  .anim .vcard:hover { transform: translateY(-2px) scale(1.02); }
+  .vcard.sel { border-color: var(--ac); background: color-mix(in srgb, var(--ac) 8%, #fff); box-shadow: 0 2px 10px color-mix(in srgb, var(--ac) 30%, transparent); }
+  .vcard .port { width: 54px; height: 96px; border-radius: 10px; object-fit: contain; background: #f0f2fa; display: block; margin: 0 auto; border: 2px solid #fff; box-shadow: 0 2px 6px rgba(70,80,140,.15); }
+  .anim .vcard.sel .port { transform: scale(1.1); }
+  .vcard .emo { font-size: 26px; width: 54px; height: 54px; display: flex; align-items: center; justify-content: center; }
+  .vcard .nm { font-size: 12px; color: #445; margin-top: auto; padding-top: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+  .vcard .chk { position: absolute; top: 6px; right: 6px; width: 16px; height: 16px; border-radius: 50%; background: var(--ac); color: #fff; font-size: 10px; display: none; align-items: center; justify-content: center; }
+  /* ── 实时变声界面 ── */
+  #rtPanel { display:none; flex:1; flex-direction:column; gap:10px; overflow-y:auto; padding:14px 16px; animation:rtIn .32s cubic-bezier(.22,.61,.36,1); }
+  @keyframes rtIn { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:none; } }
+  body.rt-on #app > *:not(header):not(#rtPanel):not(#morePanel):not(.overlay):not(#toast) { display:none !important; }
+  body.rt-on #rtPanel { display:flex; }
+  .rt-log { flex:1; overflow-y:auto; background:transparent; padding:10px 12px; font-family:Consolas,monospace; font-size:12px; color:#cdd2e0; min-height:90px; user-select:text; white-space:pre-wrap; }
+  #rtParams { display:flex; gap:18px; flex-wrap:wrap; align-items:center; }
+  #rtPanel .panel { padding: 10px 12px; }
+  #rtPanel .panel h2 { margin-bottom: 8px; }
+  .rt-vgrid { display:grid; grid-template-columns:1fr 1fr; gap:8px; overflow-y:auto; flex:1; align-content:start; padding:2px; grid-auto-rows:150px; }
+  .rt-row { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .rt-lab { font-size:12.5px; color:#667; min-width:66px; }
+  .rt-sel { flex:1; min-width:180px; padding:7px 10px; border:1px solid #dfe3f2; border-radius:9px; font-size:12.5px; background:#fff; font-family:inherit; }
+  .rt-presets { display:grid; grid-template-columns:repeat(auto-fill,minmax(104px,1fr)); gap:7px; margin-top:8px; }
+  .rt-pr { padding:8px 6px; border:1px solid #e3e9f7; border-radius:9px; background:#fff; cursor:pointer; font-size:12px; color:#556; text-align:center; font-family:inherit; transition:all .16s; }
+  .rt-pr:hover { border-color:#b8c4ec; transform:translateY(-1px); }
+  .rt-pr.sel { border-color:var(--ac); background:color-mix(in srgb, var(--ac) 9%, #fff); color:var(--ac); font-weight:600; }
+  .rt-meter { height:7px; border-radius:5px; background:#eef1fb; overflow:hidden; flex:1; min-width:120px; }
+  .rt-meter div { height:100%; width:0%; border-radius:5px; transition:width .1s linear; }
+  .rt-meter.in > div { background:linear-gradient(90deg,#6bc9f2,#5b8def); }
+  .rt-meter.out > div { background:linear-gradient(90deg,#ffb46b,#f26b9c); }
+  .rt-dot { width:9px; height:9px; border-radius:50%; background:#c9d0e0; display:inline-block; margin-right:6px; }
+  .rt-dot.on { background:#3ecf8e; box-shadow:0 0 8px rgba(62,207,142,.7); animation:rtPulse 1.4s infinite; }
+  @keyframes rtPulse { 0%,100% { opacity:1; } 50% { opacity:.45; } }
+  .vcard .cropv { position: absolute; top: 2px; right: 6px; font-size: 12px; cursor: pointer; opacity: 0; transition: opacity .18s ease, transform .18s ease; transform: translateY(-2px); z-index: 2; }
+  .vcard .cropv:hover { transform: translateY(-2px) scale(1.15); }
+  .vcard .penv { position: absolute; top: 20px; right: 6px; font-size: 12px; cursor: pointer; opacity: 0; transition: opacity .18s ease, transform .18s ease; transform: translateY(-2px); z-index: 2; }
+  .vcard .delv { position: absolute; top: 38px; right: 6px; font-size: 12px; cursor: pointer; opacity: 0; transition: opacity .18s ease, transform .18s ease; transform: translateY(-2px); z-index: 2; }
+  .vcard .delv:hover { transform: translateY(-2px) scale(1.15); }
+  .vcard .penv:hover { transform: translateY(-2px) scale(1.15); }
+  .vcard .emo { font-size: 12px !important; color: #99a; width: 54px; height: 96px; display: flex; align-items: center; justify-content: center; text-align: center; line-height: 1.4; }
+  .vcard.sel .chk { display: flex; }
+  #right { flex: 1; display: flex; flex-direction: column; gap: 10px; min-height: 0; }
+
+  #drop { border: 2px dashed #c6cbe8; border-radius: 14px; padding: 14px; text-align: center; color: #889; background: rgba(255,255,255,.9); }
+  .anim #drop { transition: .2s; }
+  #drop.over { border-color: var(--ac); background: color-mix(in srgb, var(--ac) 6%, #fff); box-shadow: 0 0 0 4px color-mix(in srgb, var(--ac) 12%, transparent); }
+  #fileList { max-height: 92px; overflow-y: auto; margin-top: 8px; display: flex; flex-wrap: wrap; gap: 5px; }
+  .chip { background: #eef1fb; border-radius: 14px; padding: 3px 10px; font-size: 11px; color: #445; display: inline-flex; align-items: center; gap: 5px; max-width: 180px; }
+  .chip .x { cursor: pointer; color: var(--ac); font-weight: bold; }
+
+  #params { display: flex; gap: 18px; flex-wrap: wrap; align-items: center; }
+  .param label { display: block; font-size: 11px; color: #889; margin-bottom: 3px; }
+  .param input, .param select { width: 84px; padding: 6px 8px; border: 1.5px solid #dfe3f2; border-radius: 8px; font-size: 13px; outline: none; background: #fff; }
+  .param input:focus { border-color: var(--h2); }
+
+  #actions { display: flex; gap: 10px; align-items: center; }
+  #goBtn { flex: 1; background: linear-gradient(90deg, var(--ac2), var(--ac)); color: #fff; border: none; border-radius: 12px; padding: 13px; font-size: 16px; font-weight: bold; letter-spacing: 2px; cursor: pointer; box-shadow: 0 4px 14px color-mix(in srgb, var(--ac) 35%, transparent); overflow: hidden; }
+  .anim #goBtn { transition: all .25s; }
+  .anim #goBtn:hover { transform: translateY(-2px); }
+  #goBtn.working { background: linear-gradient(90deg, var(--h2), var(--h1)); }
+  .mini-btn { background: #f2f4fb; border: 1px solid #dfe3f2; border-radius: 8px; padding: 7px 11px; cursor: pointer; font-size: 12px; color: #556; }
+
+  #progressWrap { display: none; }
+  #progressWrap.show { display: block; }
+  #pbar { height: 10px; background: #edeff8; border-radius: 8px; overflow: hidden; margin-top: 4px; }
+  #pfill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--h1), var(--ac)); border-radius: 8px; }
+  .anim #pfill { transition: width .4s ease; }
+  #pinfo { font-size: 11px; color: #778; margin-top: 4px; }
+
+  #log { flex: 1; overflow-y: auto; background: #23262f; border-radius: 12px; padding: 10px 12px; font-family: Consolas, monospace; font-size: 12px; color: #cdd2e0; min-height: 90px; user-select: text; }
+  .l-ok { color: #7ee6a0; } .l-err { color: #ff9b9b; } .l-info { color: #9db6ff; }
+  .sect { font-size: 13px; color: #556; font-weight: bold; margin: 2px 0 6px; }
+
+  /* ── 主题变量 ── */
+  body[data-theme="pink"] { --g1:#f6f8fc; --g2:#eef1fb; --h1:#6a9ef5; --h2:#8f7bf0; --h3:#d878c8; --ac:#e86c9f; --ac2:#ff8fb8; }
+  body[data-theme="night"] { --g1:#0f1220; --g2:#171b30; --h1:#3a4a8c; --h2:#5a4aa8; --h3:#7a4a98; --ac:#8f7bf0; --ac2:#6a9ef5; }
+  body[data-theme="mint"] { --g1:#f2faf6; --g2:#e6f4ee; --h1:#35c48e; --h2:#3aa7c9; --h3:#5f9e6e; --ac:#2fb98d; --ac2:#7dd8a8; }
+  body[data-theme="pink"]:not(.bg-on) { background: linear-gradient(160deg, var(--g1), var(--g2)); }
+
+  /* ── toast ── */
+  #toast { position: fixed; top: 70px; right: 20px; z-index: 90; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+  .toast { background: #fff; border-radius: 12px; padding: 12px 16px; box-shadow: 0 8px 30px rgba(20,22,50,.25); font-size: 13px; color: #445; display: flex; align-items: center; gap: 9px; border-left: 4px solid var(--ac); animation: toastIn .35s cubic-bezier(.2,1.4,.5,1); pointer-events: auto; }
+  .toast.out { animation: toastOut .3s ease forwards; }
+  @keyframes toastIn { from { opacity: 0; transform: translateX(60px); } to { opacity: 1; transform: none; } }
+  @keyframes toastOut { to { opacity: 0; transform: translateX(60px); } }
+  .tbtn { background: #f2f4fb; border: 1px solid #dfe3f2; border-radius: 8px; padding: 5px 12px; cursor: pointer; font-size: 12px; color: #556; }
+
+  #stars { position: fixed; inset: 0; pointer-events: none; z-index: 2; }
+
+  /* ── Edge 式设置页 ── */
+  .overlay { position: fixed; inset: 0; background: rgba(20,22,40,.5); backdrop-filter: blur(3px); display: none; align-items: center; justify-content: center; z-index: 50; }
+  .overlay.show { display: flex; animation: fadeIn .2s ease; }
+  @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+  .modal { background: #fff; border-radius: 16px; width: 760px; max-width: 94%; height: 560px; max-height: 88%; display: flex; box-shadow: 0 20px 60px rgba(0,0,0,.35); animation: popIn .28s cubic-bezier(.2,1.4,.5,1); overflow: hidden; }
+  @keyframes popIn { from { opacity: 0; transform: scale(.9) translateY(20px); } to { opacity: 1; transform: none; } }
+  .side { width: 170px; background: #f4f5fa; padding: 16px 8px; display: flex; flex-direction: column; gap: 4px; }
+  .side .sitem { padding: 10px 14px; border-radius: 8px; cursor: pointer; font-size: 13px; color: #556; display: flex; gap: 8px; align-items: center; }
+  .side .sitem:hover { background: #e9ebf5; }
+  .side .sitem.act { background: #e3e6f5; color: var(--ac); font-weight: bold; }
+  .content { flex: 1; padding: 18px 22px; overflow-y: auto; }
+  .content h3 { font-size: 15px; color: #445; margin-bottom: 14px; }
+  .set-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #f0f1f6; gap: 12px; }
+  .set-row .t { font-size: 13px; color: #445; }
+  .set-row .d { font-size: 11px; color: #99a; margin-top: 2px; }
+  .sw { width: 40px; height: 22px; border-radius: 22px; background: #d3d6e0; position: relative; cursor: pointer; transition: background .2s; flex-shrink: 0; }
+  .sw::after { content: ''; position: absolute; width: 18px; height: 18px; border-radius: 50%; background: #fff; top: 2px; left: 2px; transition: left .2s; box-shadow: 0 1px 3px rgba(0,0,0,.25); }
+  .sw.on { background: var(--ac); }
+  .sw.on::after { left: 20px; }
+  .theme-cards { display: flex; gap: 10px; margin: 8px 0; }
+  .tcard { flex: 1; border: 2px solid #e8eaf2; border-radius: 12px; padding: 12px; text-align: center; cursor: pointer; }
+  .tcard.sel { border-color: var(--ac); }
+  .tcard .swatch { height: 34px; border-radius: 8px; margin-bottom: 6px; }
+  .perf-cards { display: flex; gap: 10px; margin: 8px 0; }
+  .pcard { flex: 1; border: 2px solid #e8eaf2; border-radius: 12px; padding: 12px; text-align: center; cursor: pointer; }
+  .pcard.sel { border-color: var(--ac); background: color-mix(in srgb, var(--ac) 6%, #fff); }
+  .pcard b { display: block; font-size: 14px; color: #445; }
+  .pcard span { font-size: 11px; color: #99a; }
+  .bgbtns { display: flex; gap: 5px; margin: 8px 0; flex-wrap: nowrap; align-items: center; }
+  .bgbtns .sbtn { padding: 6px 8px; font-size: 11.5px !important; flex: 0 0 auto !important; min-width: 68px; overflow: visible !important; white-space: nowrap !important; box-sizing: border-box; }
+  #bgDropHead { flex-shrink: 0; }
+  .bgbtns { position: relative; }
+  /* 下拉栏层次 */
+  #bgDropHead { border: 1.5px solid #ccd4ea !important; box-shadow: 0 2px 7px rgba(70,80,140,.10); transition: border-color .18s, box-shadow .18s, background .18s; }
+  #bgDropHead:hover { border-color: var(--ac) !important; box-shadow: 0 4px 14px rgba(70,80,140,.18); }
+  #bgDropHead:has(+ .sw-toggle) { }
+  #savedBgList { position: fixed; z-index: 300;
+    background: #fff; border: 1px solid #dfe3f2; border-radius: 10px;
+    box-shadow: 0 10px 28px rgba(40,50,100,.18); padding: 10px 12px; width: 230px; max-width: calc(100vw - 40px); box-sizing: border-box; padding: 9px 10px;
+    max-height: 0; overflow: hidden; padding-top: 0; padding-bottom: 0;
+    transition: max-height .28s ease, padding .28s ease; }
+  #savedBgList.open { padding-top: 10px; padding-bottom: 10px; }
+  .bgbtns button { flex-shrink: 0; white-space: nowrap; }
+  .sw-toggle { position: relative; display: inline-block; width: 34px; height: 19px; flex-shrink: 0; align-self: center; }
+  .sw-toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+  .sw-toggle .sl { position: absolute; inset: 0; background: #dfe3f2; border-radius: 999px; transition: .2s; cursor: pointer; }
+  .sw-toggle .sl:before { content: ''; position: absolute; height: 15px; width: 15px; left: 2px; top: 2px; background: #fff; border-radius: 50%; transition: .2s; box-shadow: 0 1px 3px rgba(60,70,110,.25); }
+  .sw-toggle input:checked + .sl { background: var(--ac); }
+  .sw-toggle input:checked + .sl:before { transform: translateX(15px); }
+  .sbtn { background: #f2f4fb; border: 1px solid #dfe3f2; border-radius: 8px; padding: 8px 14px; cursor: pointer; font-size: 12px; color: #556; }
+  .sbtn.primary { background: linear-gradient(90deg, var(--h2), var(--h1)); color: #fff; border: none; }
+  .pack-drop { border: 2px dashed #c6cbe8; border-radius: 12px; padding: 22px; text-align: center; color: #889; margin: 8px 0; cursor: pointer; transition: border-color .18s, background .18s; }
+  .pack-drop:hover { border-color: var(--ac); }
+  .pack-drop.over { border-color: var(--ac); background: color-mix(in srgb, var(--ac) 6%, #fff); }
+  .pack-list { font-size: 12px; color: #667; line-height: 1.8; }
+  .hint { font-size: 11px; color: #99a; background: #f7f8fc; border-radius: 8px; padding: 8px 10px; margin-top: 8px; line-height: 1.7; }
+  .close-x { float: right; cursor: pointer; font-size: 18px; color: #99a; }
+
+  /* ── 颜色板（栏式） ── */
+  .color-row { display: flex; align-items: center; gap: 8px; margin: 7px 0; }
+  .color-row .cr-label { font-size: 12px; color: #667; width: 56px; flex-shrink: 0; }
+  .swatch-item { width: 34px; height: 34px; border-radius: 9px; cursor: pointer; border: 2.5px solid transparent; transition: .15s; flex-shrink: 0; }
+  .swatch-item:hover { transform: scale(1.12); }
+  .swatch-item.sel { border-color: #333; box-shadow: 0 0 0 2px #fff inset, 0 2px 8px rgba(0,0,0,.25); }
+
+  /* ── 快捷键行 ── */
+  .hk-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #f0f1f6; }
+  .hk-row .t { font-size: 13px; color: #445; }
+  .hk-box { min-width: 110px; padding: 6px 12px; border: 1.5px solid #dfe3f2; border-radius: 8px; font-size: 13px; color: #556; cursor: pointer; text-align: center; background: #fafbff; }
+  .hk-box.rec { border-color: var(--ac); color: var(--ac); font-weight: bold; }
+
+  /* ── 试听按钮 ── */
+  .chip .play { cursor: pointer; }
+  .chip .play:hover { transform: scale(1.2); }
+  .hist-item { font-size: 12px; color: #667; padding: 7px 0; border-bottom: 1px dashed #eef0f6; display: flex; justify-content: space-between; gap: 10px; }
+  .hist-item .t { color: #99a; font-size: 11px; flex-shrink: 0; }
+
+  /* ── 解压横幅 ── */
+  #unpackBanner { position: fixed; top: 0; left: 0; right: 0; z-index: 60; background: linear-gradient(90deg, #6a9ef5, #8f7bf0); color: #fff; padding: 10px 20px; font-size: 13px; display: none; align-items: center; gap: 10px; box-shadow: 0 2px 10px rgba(90,100,180,.4); }
+  #unpackBanner.show { display: flex; }
+  .spinner { width: 14px; height: 14px; border: 2px solid rgba(255,255,255,.4); border-top-color: #fff; border-radius: 50%; animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body data-theme="pink">
+<img id="bgImage" style="display:none">
+<video id="bgVideo" autoplay loop playsinline></video>
+<div id="app">
+<header>
+  <div class="logo">🎤</div>
+  <h1>RVC 声线转音</h1>
+  <button class="hbtn" id="rtSwitch" onclick="toggleRealtime()" title="点击切换实时转音界面" style="padding:5px 7px;display:flex;align-items:center">
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <rect x="2.5" y="5.5" width="19" height="13" rx="2.6"></rect>
+      <line x1="15.5" y1="5.5" x2="15.5" y2="18.5"></line>
+      <line x1="2.5" y1="14.5" x2="15.5" y2="14.5"></line>
+    </svg>
+  </button>
+  <span class="ver" id="verTag"></span>
+  <span style="color:rgba(255,255,255,.85);font-size:11px">蔚蓝档案声线 · 视频配音好帮手</span>
+  <div class="status"><span class="dot" id="stDot"></span><span id="stText">检测引擎…</span></div>
+  <button class="hbtn" id="themeBtn">🎨</button>
+  <button class="hbtn" id="plazaBtn" onclick="openPlaza()">🏪 广场</button>
+  <button class="hbtn" id="moreBtn">••• 更多</button>
+  <button class="hbtn" onclick="openSettings('look')">⚙️ 设置</button>
+</header>
+<div id="rtPanel">
+  <div style="display:flex;gap:14px;flex:1;min-height:0">
+    <div style="width:350px;flex-shrink:0;display:flex;flex-direction:column;gap:10px;min-height:0">
+      <div class="panel" style="flex:1;display:flex;flex-direction:column;min-height:130px"><h2>🎭 选择声线</h2><div id="rtVoiceGrid" class="rt-vgrid"></div></div>
+      <div class="panel" style="flex-shrink:0"><h2>⚙️ 参数</h2>
+        <div id="rtParams" style="row-gap:10px">
+          <div class="param"><label title="男声转女声 +12，女声转男声 −12">音调（半音）</label><input id="rtPitch" type="number" value="0"></div>
+          <div class="param"><label title="改变音色共鸣（共振峰）：正数更细亮，负数更低沉">共鸣（共振峰）</label><input id="rtFormant" type="number" step="0.1" value="0"></div>
+          <div class="param"><label>相似度</label><input id="rtRate" type="number" step="0.05" value="0.75"></div>
+          <div class="param"><label>输出增益</label><input id="rtGain" type="number" step="0.05" value="1"></div>
+          <div class="param"><label>采样率</label><select id="rtSr"><option value="48000">48000 Hz</option><option value="44100">44100 Hz</option></select></div>
+          <div class="param"><label>块大小</label><select id="rtBlock"><option value="512">512</option><option value="1024" selected>1024</option><option value="2048">2048</option></select></div>
+        </div>
+      </div>
+      <div id="rtSysSlot" style="flex-shrink:0"></div>
+    </div>
+    <div style="flex:1;display:flex;flex-direction:column;gap:8px;min-width:0">
+      <div class="panel">
+        <h2>🎧 音频设备</h2>
+        <div style="display:flex;gap:8px;align-items:center;margin-bottom:7px">
+          <span class="rt-lab" style="min-width:54px">🎤 输入</span>
+          <select id="rtIn" class="rt-sel" style="flex:1;min-width:0"></select>
+        </div>
+        <div style="display:flex;gap:8px;align-items:center">
+          <span class="rt-lab" style="min-width:54px">🔊 输出</span>
+          <select id="rtOut" class="rt-sel" style="flex:1;min-width:0"></select>
+        </div>
+        <div style="font-size:11px;color:#aab;margin-top:7px;line-height:1.6">通话/游戏里用变声：输出选 <b>CABLE Input</b>，再把通话软件的麦克风选成 <b>CABLE Output</b>。</div>
+      </div>
+      <div class="panel" id="rtActions">
+        <div style="display:flex;gap:8px;align-items:stretch">
+          <button id="rtBtn" style="flex:1;background:linear-gradient(90deg,var(--ac2),var(--ac));color:#fff;border:none;border-radius:12px;padding:13px;font-size:16px;font-weight:bold;letter-spacing:2px;cursor:pointer;box-shadow:0 4px 14px color-mix(in srgb,var(--ac) 35%,transparent);overflow:hidden"><span class="btn-inner">▶ 开始变音</span></button>
+          <button id="rtRecBtn" title="录 3 秒输入设备的声音，验证麦克风是否正常（只存在内存，退出即消失）" style="flex:0 0 auto;background:#f4f6fc;color:#445;border:1px solid #dfe3f2;border-radius:12px;padding:0 14px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap">🎤 开始录音</button>
+          <button id="rtPlayBtn" title="播放刚才录的声音，验证扬声器与转换是否正常" disabled style="flex:0 0 auto;background:#f4f6fc;color:#445;border:1px solid #dfe3f2;border-radius:12px;padding:0 14px;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap;opacity:.5">🔊 播放录音</button>
+        </div>
+      </div>
+      <div class="panel" style="flex:1;display:flex;flex-direction:column;min-height:0">
+        <h2>📋 运行日志</h2>
+        <div style="flex:1;display:flex;flex-direction:column;background:#23262f;border-radius:12px;overflow:hidden;min-height:160px">
+          <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:7px 12px;background:#1b1e28;border-bottom:1px solid #333845;font-size:11.5px;color:#cdd2e0">
+            <span style="white-space:nowrap"><span class="rt-dot" id="rtDot"></span><span id="rtState">未运行</span></span>
+            <span style="display:flex;align-items:center;gap:5px;flex:1;min-width:110px" title="麦克风输入音量">🎤 输入<div class="rt-meter in" style="height:7px"><div id="rtMIn"></div></div></span>
+            <span style="display:flex;align-items:center;gap:5px;flex:1;min-width:110px" title="变声后输出音量">🔊 输出<div class="rt-meter out" style="height:7px"><div id="rtMOut"></div></div></span>
+          </div>
+          <div id="rtLog" class="rt-log"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<style>
+.mitem{padding:7px 9px;border-radius:8px;cursor:pointer;color:#556;font-size:12px;white-space:nowrap}
+.mitem:hover{background:#e8ecf8}
+.mitem.act{background:#fff;color:var(--ac);font-weight:600;box-shadow:0 1px 4px rgba(70,80,140,.10)}
+.mbox{background:#fff;border:1px solid #e3e9f7;border-radius:11px;padding:12px;margin-bottom:10px;box-shadow:0 1px 3px rgba(70,80,140,.05)}
+.dline{padding:5px 8px;border-radius:7px;margin-bottom:5px;font-size:12px;line-height:1.55;word-break:break-all}
+.dok{background:#eefaf1;color:#2f7d4f}
+.dwarn{background:#fff8e6;color:#8a6d1f}
+.derr{background:#fdeef1;color:#a63a52}
+.dinfo{background:#eef3fd;color:#3a5a9c}
+/* 层级感：圆角正方边框 */
+.mitem{border:1px solid transparent;transition:background .16s,border-color .16s,transform .12s}
+.mitem.act{border-color:#dbe2f4}
+.mitem:active{transform:scale(.97)}
+.mbtn{border:1px solid #d3dbf0;border-radius:9px;background:#fff;padding:6px 12px;cursor:pointer;font-size:12px;color:#4a5570;
+  box-shadow:0 1px 2px rgba(70,80,140,.08);transition:transform .12s,filter .12s,box-shadow .12s,border-color .16s,color .16s}
+.mbtn:hover{border-color:var(--ac);color:var(--ac);box-shadow:0 2px 6px rgba(70,80,140,.14)}
+.mbtn:active{transform:scale(.94);filter:brightness(1.32)}
+#morePanel{border:1px solid #e9edf8}
+/* 打开 / 关闭：斜着翻页 */
+#morePanel{transform-origin:top right;opacity:0;transform:perspective(1000px) rotateY(-24deg) translateY(-6px) scale(.95);
+  transition:transform .28s cubic-bezier(.2,.9,.3,1.12),opacity .2s ease}
+#morePanel.show{opacity:1;transform:perspective(1000px) rotateY(0) translateY(0) scale(1)}
+/* 选项切换：抽屉式滑入 */
+@keyframes drawerIn{from{transform:translateX(28px);opacity:0}to{transform:translateX(0);opacity:1}}
+.pane-anim{animation:drawerIn .26s cubic-bezier(.2,.9,.3,1.06)}
+/* 松开功能按钮：文字与边框闪一下 */
+@keyframes sparkle{0%{box-shadow:0 0 0 0 rgba(120,150,255,.55),0 0 10px 2px rgba(255,255,255,.9);border-color:#fff;color:#fff}
+  100%{box-shadow:0 0 0 7px rgba(120,150,255,0);border-color:var(--ac);color:inherit}}
+.mbtn.spark{animation:sparkle .32s ease-out}
+.c2048{aspect-ratio:1;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px;border-radius:7px;color:#2b3a66;min-width:0}
+</style>
+<div id="morePanel" style="display:none;position:fixed;top:64px;right:18px;width:600px;height:452px;background:#fff;border-radius:14px;box-shadow:0 12px 40px rgba(40,50,100,.24);z-index:900;font-size:12px;overflow:hidden">
+  <div style="display:flex;height:100%">
+    <div style="width:132px;background:#f4f6fc;padding:8px;display:flex;flex-direction:column;gap:2px;flex-shrink:0">
+      <div style="font-weight:600;color:#aab;padding:6px 8px 2px;font-size:11px">百宝箱</div>
+      <div class="mitem act" data-m="tool">工具箱</div>
+      <div class="mitem" data-m="feed">反馈</div>
+      <div class="mitem" data-m="diag">软件诊断</div>
+      <div class="mitem" data-m="log">日志记录</div>
+      <div class="mitem" data-m="game">小游戏</div>
+      <div class="mitem" data-m="author">原作者</div>
+    </div>
+    <div style="flex:1;display:flex;flex-direction:column;min-width:0">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:11px 14px;border-bottom:1px solid #eef1f8">
+        <b id="moreTitle" style="font-size:13px">工具箱</b>
+        <span style="cursor:pointer;color:#aab;font-size:15px" id="moreClose">✕</span>
+      </div>
+      <div id="moreBody" style="flex:1;overflow-y:auto;padding:12px;background:#f7f9ff">
+        <div id="paneTool">
+          <div class="mbox">
+            <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+              <button class="mbtn fbtn" id="memBtn">内存优化</button>
+              <button class="mbtn fbtn" id="cleanBtn">清理垃圾</button>
+              <button class="mbtn fbtn" id="prankBtn" style="color:#c04a63;border-color:#f2ced7">千万别点!</button>
+            </div>
+            <div style="color:#889;margin-top:9px">清理软件转换记录和 Audio-PA 里的所有音频</div>
+            <div style="color:#889;margin-top:5px">可用 <b id="memFree">--</b> / 共 <b id="memTotal">--</b></div>
+            <div id="memTip" style="color:#aab;margin-top:5px">点「内存优化」清理所有进程工作集、待机列表与系统文件缓存</div>
+            <div style="background:#eef3fd;color:#3a5a9c;border-radius:8px;padding:7px 10px;margin-top:10px">作者留言：嗯对，就是模仿了 PCL2</div>
+          </div>
+          <div class="mbox">
+            <b>多线程高速下载器</b>
+            <div style="margin-top:9px;display:flex;flex-direction:column;gap:6px">
+              <div style="display:flex;gap:8px;align-items:center">
+                <span style="color:#889;width:60px;flex-shrink:0">下载地址</span>
+                <input id="dlUrl" placeholder="https://…" style="flex:1;min-width:0;padding:6px 8px;border:1px solid #dde3f0;border-radius:8px;font-size:12px">
+              </div>
+              <div style="display:flex;gap:8px;align-items:center">
+                <span style="color:#889;width:60px;flex-shrink:0">保存路径</span>
+                <input id="dlPath" placeholder="选择文件夹" style="flex:1;min-width:0;padding:6px 8px;border:1px solid #dde3f0;border-radius:8px;font-size:12px">
+                <button class="mbtn" id="dlPick">选择</button>
+              </div>
+              <div style="display:flex;gap:8px;align-items:center">
+                <span style="color:#889;width:60px;flex-shrink:0">文件名</span>
+                <input id="dlName" placeholder="留空则自动从链接推断" style="flex:1;min-width:0;padding:6px 8px;border:1px solid #dde3f0;border-radius:8px;font-size:12px">
+              </div>
+              <div style="display:flex;gap:8px;align-items:center">
+                <span style="color:#889;width:60px;flex-shrink:0">线程数</span>
+                <select id="dlThreads" style="padding:5px 8px;border:1px solid #dde3f0;border-radius:8px;font-size:12px"><option value="4">4</option><option value="8" selected>8</option><option value="12">12</option><option value="16">16</option><option value="24">24</option><option value="32">32</option></select>
+                <button class="mbtn fbtn" id="dlGo" style="background:var(--ac);color:#fff;border-color:transparent">开始下载</button>
+                <button class="mbtn" id="dlCancel">取消</button>
+              </div>
+            </div>
+            <div id="dlBarWrap" style="display:none;margin-top:9px">
+              <div style="height:6px;background:#e8ecf5;border-radius:4px;overflow:hidden"><div id="dlBar" style="height:100%;width:0;background:var(--ac);transition:width .2s"></div></div>
+              <div id="dlInfo" style="color:#889;margin-top:4px">等待中…</div>
+            </div>
+          </div>
+        </div>
+        <div id="paneFeed" style="display:none">
+          <div class="mbox" style="text-align:center;padding:26px 14px">
+            <div style="font-size:17px;font-weight:600;color:#8a93a8">暂不可用</div>
+            <div style="color:#889;line-height:2;margin-top:10px">原作者目前还没有服务器<br>如有问题请到「原作者」选项，找到原作者联系</div>
+            <div style="color:#c6ccdb;font-family:Consolas,monospace;font-size:11px;line-height:2;margin-top:12px">xxxxxxxxxx　　xxxxxxxxxx<br>xxxxxxxxxx　　xxxxxxxxxx</div>
+          </div>
+        </div>
+        <div id="paneDiag" style="display:none">
+          <div class="mbox">
+            <b>文件完整性</b>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:9px">
+              <button class="mbtn fbtn" id="repairCheckBtn">检测文件</button>
+              <button class="mbtn fbtn" id="repairFixBtn" style="color:#2f7d4f;border-color:#bfe3cd">一键修复缺失</button>
+            </div>
+            <div style="color:#889;margin-top:9px">检查软件本体（CRVC VTFM）与脚本目录（Tools）中的关键文件，误删时从内置修复包一键恢复。<br>「Engine」是可更换的引擎包，不在检测范围内。</div>
+            <div id="repairSrc" style="color:#aab;margin-top:6px"></div>
+            <div id="repairOut" style="margin-top:8px"></div>
+          </div>
+          <div class="mbox">
+            <b>系统诊断</b>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:9px">
+              <button class="mbtn fbtn" id="diagBtn">开始诊断</button>
+              <button class="mbtn" id="diagCopy">复制结果</button>
+              <button class="mbtn" id="diagFile">结果文件</button>
+            </div>
+            <div style="color:#aab;margin-top:8px">采用 txt 格式，自动保存到「下载」里（需要点击此按钮才会生成文件）</div>
+            <div id="diagOut" style="margin-top:8px"></div>
+          </div>
+        </div>
+        <div id="paneLog" style="display:none">
+          <div class="mbox">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px">
+              <b>转换日志：</b>
+              <span style="display:flex;gap:6px"><button class="mbtn" id="logRefresh">刷新</button><button class="mbtn" id="logReset">重置</button></span>
+            </div>
+            <div id="convLog" style="height:130px;overflow-y:auto;background:#23262f;color:#cdd2e0;border-radius:9px;padding:9px;font-family:Consolas,monospace;font-size:11px;white-space:pre-wrap">（暂无转换日志）</div>
+          </div>
+          <div class="mbox">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px">
+              <b>报错日志：</b>
+              <span style="display:flex;gap:6px"><button class="mbtn" id="errRefresh">刷新</button><button class="mbtn" id="errReset">重置</button></span>
+            </div>
+            <div id="errLog" style="height:130px;overflow-y:auto;background:#2b2028;color:#f2cdd6;border-radius:9px;padding:9px;font-family:Consolas,monospace;font-size:11px;white-space:pre-wrap">（暂无报错）</div>
+          </div>
+        </div>
+        <div id="paneGame" style="display:none">
+          <div class="mbox">
+            <b>在线游玩单机小游戏：</b>
+            <div id="gameList" style="margin-top:9px;display:flex;flex-direction:column;gap:7px"></div>
+          </div>
+          <div id="gameHost"></div>
+        </div>
+        <div id="paneAuthor" style="display:none">
+          <div class="mbox">
+            <div style="font-size:15px;font-weight:600">原作者名：幼辞PS、米基哈</div>
+            <div style="color:#889;margin-top:10px">抖音号：</div>
+            <div id="authorList" style="margin-top:9px;display:flex;flex-direction:column;gap:8px"></div>
+            <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:12px;border-top:1px dashed #e6eaf4;padding-top:10px">
+              <span style="color:#889;font-style:italic;font-size:12px">洛安开源社区QQ：1020835327</span>
+              <span style="color:#889;font-style:italic;font-size:12px">社区作者QQ：1274261394</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="layout">
+  <div id="left">
+    <div class="panel" style="flex:1;display:flex;flex-direction:column;min-height:130px"><h2>🎭 选择声线</h2><div id="voiceGrid" style="flex:1;max-height:none;grid-auto-rows:150px;align-content:start"></div></div>
+    <div class="panel" style="flex-shrink:0"><h2>⚙️ 参数</h2>
+      <div id="params">
+        <div class="param"><label>音调（半音）</label><input id="pitch" type="number" value="0" onchange="savePatch({pitch:parseFloat(this.value)||0})"></div>
+        <div class="param"><label>相似度</label><input id="rate" type="number" step="0.05" value="0.66" onchange="savePatch({index_rate:parseFloat(this.value)||0})"></div>
+        <div class="param"><label>保护</label><input id="prot" type="number" step="0.05" value="0.33" onchange="savePatch({protect:parseFloat(this.value)||0})"></div>
+        <div class="param"><label>音高算法</label><select id="f0" onchange="savePatch({f0method:this.value})"><option value="pm">pm（极速省内存）</option><option value="harvest">harvest（轻量）</option><option value="crepe">crepe（较准）</option><option value="rmvpe">rmvpe（最准）</option></select></div>
+        <div class="param"><label>CPU 线程</label><select id="th" onchange="savePatch({torch_threads:this.value})"><option value="auto">auto（自动）</option><option value="1" selected>1（默认·省内存）</option><option value="2">2</option><option value="4">4</option><option value="8">8</option><option value="16">16</option><option value="32">32</option><option value="64">64</option><option value="128">128</option></select></div>
+        <div class="param"><label>输出格式</label><select id="fmt" onchange="savePatch({output_format:this.value})"><option value="mp3">mp3</option><option value="wav">wav</option><option value="mp4">mp4（视频）</option></select></div>
+      </div>
+    </div>
+    <div class="panel" id="sysPanel" style="font-size:11px;flex-shrink:0;padding:10px 12px">
+      <h2 style="margin:0 0 4px">系统状态</h2>
+      <div style="display:flex;justify-content:space-between"><span style="color:#889">内存 (RAM)</span><span id="stRam" style="font-weight:600">--</span></div>
+      <div style="height:4px;background:#e8ecf5;border-radius:3px;overflow:hidden;margin:2px 0 4px"><div id="sfRam" style="height:100%;width:0;background:#6a9ef5;transition:width .4s"></div></div>
+      <div style="display:flex;justify-content:space-between"><span style="color:#889">处理器 (CPU)</span><span id="stCpu" style="font-weight:600">--</span></div>
+      <div style="height:4px;background:#e8ecf5;border-radius:3px;overflow:hidden;margin:2px 0 4px"><div id="sfCpu" style="height:100%;width:0;background:#8f7bf0;transition:width .4s"></div></div>
+      <div style="display:flex;justify-content:space-between"><span style="color:#889">硬盘 (SSD)</span><span id="stDisk" style="font-weight:600">--</span></div>
+      <div style="height:4px;background:#e8ecf5;border-radius:3px;overflow:hidden;margin:2px 0 0"><div id="sfDisk" style="height:100%;width:0;background:#35c48e;transition:width .4s"></div></div>
+      <div id="sysHint" style="font-size:10px;color:#aab;margin-top:3px">占用率 · 每 2 秒刷新</div>
+    </div>
+  </div>
+  <div id="right">
+    <div class="panel">
+      <div id="drop">
+        <div style="font-size:30px">📁</div>
+        <div><b>拖入音频文件</b> 或 <a style="color:var(--ac);cursor:pointer" id="pickLink">点击选择</a></div>
+        <div style="font-size:11px;color:#aab;margin-top:3px">没拖文件时自动转「Audio-PA」里的全部</div>
+        <div id="fileList"></div>
+      </div>
+    </div>
+    <div class="panel" id="actions">
+      <button id="goBtn"><span class="btn-inner">▶ 开始转音</span></button>
+      <button class="mini-btn" id="inBtn">📂 Audio-PA</button>
+      <button class="mini-btn" id="outBtn">📂 Audio-RL</button>
+      <button class="mini-btn" id="clearInBtn" title="清空输入文件夹 Audio-PA">🗑 清空输入</button>
+    </div>
+    <div class="panel" id="progressWrap">
+      <div class="sect">转换进度</div>
+      <div id="pbar"><div id="pfill"></div></div>
+      <div id="pinfo"></div>
+    </div>
+    <div class="panel" style="flex:1;display:flex;flex-direction:column;min-height:0">
+      <h2>📋 运行日志</h2><div id="log"></div>
+    </div>
+  </div>
+</div>
+</div>
+
+<div id="prankLayer" style="position:fixed;left:0;right:0;top:8px;text-align:center;color:#c04a63;font-size:13px;font-weight:600;pointer-events:none;z-index:999"></div>
+<div id="toast"></div>
+<div id="jpWarn" style="display:none;position:fixed;inset:0;background:rgba(20,22,40,.62);z-index:9999;align-items:center;justify-content:center">
+  <div style="background:#fff;border-radius:16px;padding:24px 26px;width:340px;box-shadow:0 20px 60px rgba(0,0,0,.4);text-align:center;animation:jpPop .22s cubic-bezier(.2,.9,.3,1.2)">
+    <div style="font-size:16px;font-weight:700;color:#445;margin-bottom:12px">配置警告</div>
+    <div style="font-size:12.5px;color:#889;line-height:1.8">⚠ 日配声线需要 5070Ti + 7800X3D 级别以上的配置，请慎重选择</div>
+    <div style="display:flex;gap:10px;margin-top:18px">
+      <button onclick="_jpCancel()" style="flex:1;padding:10px;border:none;border-radius:10px;background:linear-gradient(90deg,var(--ac2),var(--ac));color:#fff;font-size:13px;cursor:pointer">取消</button>
+      <button onclick="_jpOk()" style="flex:1;padding:10px;border:1.5px solid #d3d6e0;border-radius:10px;background:transparent;color:#99a;font-size:13px;cursor:pointer">确认</button>
+    </div>
+  </div>
+</div>
+<style>@keyframes jpPop { from { opacity:0; transform:scale(.9); } to { opacity:1; transform:scale(1); } }</style>
+<canvas id="stars"></canvas>
+<div id="unpackBanner"><span class="spinner"></span><span id="unpackText">正在解压资源包…</span></div>
+
+<!-- ── Edge 式设置页 ── -->
+<div class="overlay" id="ov-settings">
+  <div class="modal">
+    <div class="side">
+      <div class="sitem act" data-tab="look" onclick="setTab('look')">🎨 外观</div>
+      <div class="sitem" data-tab="perf" onclick="setTab('perf')">⚡ 性能</div>
+      <div class="sitem" data-tab="keys" onclick="setTab('keys')">⌨️ 按键</div>
+      <div class="sitem" data-tab="packs" onclick="setTab('packs')">🎭 声线包</div>
+      <div class="sitem" data-tab="mobile" onclick="setTab('mobile')">📱 手机</div>
+      <div class="sitem" data-tab="hist" onclick="setTab('hist')">📜 历史</div>
+      <div class="sitem" data-tab="lang" data-no-mars="1" onclick="setTab('lang')">🌐 语言</div>
+      <div class="sitem" data-tab="about" onclick="setTab('about')">ℹ️ 关于</div>
+    </div>
+    <div class="content" id="setContent"></div>
+  </div>
+</div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const VERSION = '2.6.01.101';
+// 全局错误捕获：任何未处理异常都弹提示，避免“点了没反应又没报错”
+window.addEventListener('error', (ev) => {
+  const m = (ev && ev.message) || '未知脚本错误';
+  try { toast('❌ 脚本错误：' + m, 6000); } catch (e) { }
+});
+window.addEventListener('unhandledrejection', (ev) => {
+  const r = ev && ev.reason;
+  const m = (r && (r.message || r.msg)) || String(r || '未知异常');
+  try { toast('❌ 未处理异常：' + m, 6000); } catch (e) { }
+});
+const THEMES = ['pink', 'night', 'mint'];
+const SOLID_COLORS = [
+  ['#ffffff', '纯白'], ['#ffd6e7', '浅粉'], ['#d6eaff', '天蓝'], ['#e3dcff', '浅紫'],
+  ['#d6f5e6', '薄荷'], ['#fff3d6', '奶油'], ['#eef0f4', '雾灰'], ['#f5e0d6', '浅杏'],
+  ['#1c2030', '深夜'], ['#16223c', '墨蓝'], ['#2a1830', '深紫'], ['#0f2a24', '墨绿'],
+];
+const GRAD_COLORS = [
+  ['linear-gradient(135deg,#ffd6e7,#d6eaff)', '粉蓝'], ['linear-gradient(135deg,#ffd6e7,#e3dcff)', '粉紫'],
+  ['linear-gradient(135deg,#d6eaff,#e3dcff)', '蓝紫'], ['linear-gradient(135deg,#d6f5e6,#d6eaff)', '薄荷蓝'],
+  ['linear-gradient(135deg,#fff3d6,#ffd6e7)', '奶油粉'], ['linear-gradient(135deg,#ffd6e7,#fff3d6,#d6eaff)', '彩虹'],
+  ['linear-gradient(135deg,#1c2030,#3a4a8c)', '暗夜'], ['linear-gradient(135deg,#16223c,#7a4a98)', '星云'],
+  ['linear-gradient(135deg,#ffd6a8,#ff9db4)', '晚霞'], ['linear-gradient(135deg,#b8f0d0,#7dd8a8)', '森林'],
+];
+let state = null, files = [], working = false;
+let mobileOn = false, mobileUrl = '';
+$('verTag').textContent = 'v' + VERSION;
+
+// ── 音效 ──
+const snds = {};
+function playSnd(name) {
+  if (!state || state.settings.sounds === false) return;
+  try { if (!snds[name]) snds[name] = new Audio('./assets/' + name + '.wav'); snds[name].currentTime = 0; snds[name].play().catch(() => {}); } catch { }
+}
+
+// ── 粒子 ──
+let starsOn = false, starRAF = null;
+function toggleStars(on, count) {
+  const c = $('stars');
+  if (!on) { starsOn = false; if (starRAF) cancelAnimationFrame(starRAF); c.width = c.height = 1; return; }
+  if (starsOn) return;
+  starsOn = true;
+  let parts = [];
+  const x = c.getContext('2d');
+  function resize() { c.width = innerWidth; c.height = innerHeight; }
+  resize(); addEventListener('resize', resize);
+  for (let i = 0; i < count; i++) parts.push({ x: Math.random() * 2000, y: Math.random() * 1000, r: 1 + Math.random() * 2.4, v: 0.15 + Math.random() * 0.4, a: 0.2 + Math.random() * 0.5, tw: Math.random() * 6 });
+  function tick(t) {
+    if (!starsOn) return;
+    x.clearRect(0, 0, c.width, c.height);
+    for (const p of parts) {
+      p.y -= p.v; if (p.y < -8) { p.y = c.height + 8; p.x = Math.random() * c.width; }
+      x.beginPath(); x.arc(p.x, p.y, p.r, 0, 7);
+      x.fillStyle = 'rgba(150,160,240,' + (p.a * (0.6 + 0.4 * Math.sin(t / 900 + p.tw))) + ')';
+      x.fill();
+    }
+    starRAF = requestAnimationFrame(tick);
+  }
+  starRAF = requestAnimationFrame(tick);
+}
+
+// ── toast ──
+function toast(msg, ms = 3000, btn) {
+  const d = document.createElement('div');
+  d.className = 'toast';
+  d.innerHTML = '<span>' + msg + '</span>';
+  if (btn) { const b = document.createElement('button'); b.className = 'tbtn'; b.textContent = btn.text; b.onclick = btn.fn; d.appendChild(b); }
+  $('toast').appendChild(d);
+  setTimeout(() => { d.classList.add('out'); setTimeout(() => d.remove(), 320); }, ms);
+}
+
+// 日志历史（更多面板"日志记录"读取，独立于 DOM）
+const logHistory = [];
+function log(msg, cls) {
+  const d = document.createElement('div');
+  if (cls) d.className = 'l-' + cls;
+  d.textContent = msg;
+  $('log').appendChild(d);
+  $('log').scrollTop = $('log').scrollHeight;
+  const line = new Date().toLocaleTimeString('zh-CN', { hour12: false }) + ' ' + (cls || '') + ' ' + msg;
+  logHistory.push(line);
+  if (logHistory.length > 5000) logHistory.splice(0, logHistory.length - 5000);
+  if (cls === 'err') window.__pushErr && window.__pushErr(line);
+}
+
+// ── 应用设置 ──
+function applySettings() {
+  const s = state.settings;
+  document.body.dataset.theme = s.theme || 'pink';
+  document.body.classList.toggle('anim', s.animations !== false);
+  document.body.classList.toggle('bg-on', s.bgMode !== 'white' && s.bgMode !== 'color');
+  const isBg2 = s.bgMode !== 'white' && s.bgMode !== 'color';
+  const sh = $('sysHint');
+  if (sh) sh.textContent = isBg2 ? '占用率 · 每 5 秒刷新' : '占用率 · 每 2 秒刷新';
+  const bgImg = $('bgImage'), bgVid = $('bgVideo');
+  bgImg.style.display = 'none'; bgVid.style.display = 'none'; bgVid.pause();
+  bgVid.onended = () => { try { bgVid.currentTime = 0; } catch (e) { } bgVid.play().catch(() => {}); };
+  bgImg.onload = () => { };
+  bgImg.onerror = () => { if (bgImg.getAttribute('src')) toast('壁纸图片加载失败', 3000); };
+  bgVid.onerror = () => { if (bgVid.getAttribute('src')) toast('壁纸视频加载失败', 3000); };
+  if (s.bgMode === 'image' && s.bgFile) {
+    bgImg.src = 'rvc://bg/' + encodeURIComponent(s.bgFile) + '?v=' + Date.now();
+    bgImg.style.display = 'block';
+  } else if (s.bgMode === 'video' && s.bgFile) {
+    bgVid.src = 'rvc://bg/' + encodeURIComponent(s.bgFile) + '?v=' + Date.now();
+    bgVid.style.display = 'block';
+    try { bgVid.muted = false; bgVid.volume = s.bgVolume != null ? s.bgVolume : 0.5; } catch (e) { }
+    bgVid.play().catch(() => {});
+  } else if (s.bgMode === 'color' && s.bgColor) {
+    document.body.style.background = s.bgColor;
+  } else {
+    document.body.style.background = '';
+    bgImg.src = '';
+    bgVid.src = '';
+    try { bgVid.load(); } catch (e) { }
+  }
+  const perfCount = { low: 0, mid: 42, high: 80 }[s.perf || 'mid'];
+  if (s.particles !== false && perfCount > 0) toggleStars(true, perfCount);
+  else toggleStars(false, 0);
+  // 恢复转音参数（音调/相似度/保护/音高算法/线程/格式）
+  const setVal = (id, v) => { const el = $(id); if (el && v != null && v !== '') el.value = v; };
+  setVal('pitch', s.pitch != null ? s.pitch : 0);
+  setVal('rate', s.index_rate != null ? s.index_rate : 0.66);
+  setVal('prot', s.protect != null ? s.protect : 0.33);
+  const f0el = $('f0');
+  if (f0el) {
+    const fv = s.f0method || 'rmvpe';
+    if (['pm', 'harvest', 'crepe', 'rmvpe'].indexOf(fv) >= 0) f0el.value = fv;
+  }
+  setVal('th', s.torch_threads || '1');
+  setVal('fmt', s.output_format || 'mp3');
+}
+
+// ── 状态 ──
+let jpOkCb = null;
+function showJpWarn(cb) {
+  jpOkCb = cb;
+  const w = $('jpWarn');
+  if (w) w.style.display = 'flex';
+}
+window._jpCancel = () => { $('jpWarn').style.display = 'none'; jpOkCb = null; };
+window._jpOk = () => { $('jpWarn').style.display = 'none'; const cb = jpOkCb; jpOkCb = null; if (cb) cb(); };
+async function refreshState() {
+  state = await window.rpc.getState();
+  if (state.unpacking) {
+    $('unpackBanner').classList.add('show');
+    $('unpackText').textContent = '正在解压' + state.unpacking.kind + '包（' + state.unpacking.file + '），请稍候…装完会自动删除压缩包';
+  } else {
+    $('unpackBanner').classList.remove('show');
+  }
+  const dot = $('stDot'), txt = $('stText');
+  if (state.engineOk) { dot.className = 'dot'; txt.textContent = '引擎就绪'; }
+  else { dot.className = 'dot off'; txt.textContent = '未找到引擎'; }
+  // 防乱搞：壁纸文件被外部删除时自动恢复空白（透明度一起复位）
+  const bs = state.settings || {};
+  if (bs.bgMode === 'image' || bs.bgMode === 'video') {
+    try {
+      const list = await window.rpc.listBg();
+      if (!list.some((f) => f.name === bs.bgFile)) {
+        await window.rpc.saveSettings({ bgMode: 'white', bgFile: '' });
+        state = await window.rpc.getState();
+      }
+    } catch (e) { }
+  }
+  applySettings();
+  renderVoices();
+  // 火星文界面：启动后把文字换成生僻字乱码
+  if (state.settings && state.settings.lang === 'mars') setTimeout(() => { try { startMars(); } catch (e) { } }, 400);
+  // 恢复上次选择的界面（录音 / 实时）
+  try {
+    const rt = state.settings && state.settings.rtMode === 'realtime';
+    document.body.classList.toggle('rt-on', !!rt); moveSysPanel(!!rt);
+    rtSwitchLabel();
+    if (rt) {
+      const rc = (state.settings && state.settings.rtConfig) || {};
+      if (rc.sampleRate) $('rtSr').value = String(rc.sampleRate);
+      if (rc.blockSize) $('rtBlock').value = String(rc.blockSize);
+      if (rc.gain) { $('rtGain').value = String(rc.gain); }
+      rtPresetId = (state.settings && state.settings.rtPreset) || '';
+      rtRenderVoices();
+      if (rc.f0upKey != null && $('rtPitch')) { $('rtPitch').value = String(rc.f0upKey); }
+      if (rc.indexRate != null && $('rtRate')) { $('rtRate').value = String(rc.indexRate); }
+      if (rc.formant != null && $('rtFormant')) { $('rtFormant').value = String(rc.formant); }
+      const wantName = (state.settings && state.settings.rtVoice) || '';
+      if (wantName && state.voices) {
+        const vi = state.voices.findIndex((x) => x.name === wantName);
+        if (vi >= 0) rtSelIdx = vi;
+      }
+      rtLoadDevices().then(() => {
+        if (rc.inputDevice != null && $('rtIn')) $('rtIn').value = String(rc.inputDevice);
+        if (rc.outputDevice != null && $('rtOut')) $('rtOut').value = String(rc.outputDevice);
+      });
+    }
+  } catch (e) { }
+  // 启动后自动体检一次关键文件（只提示，不打扰使用）
+  if (!window._repairChecked) {
+    window._repairChecked = true;
+    setTimeout(async () => {
+      try {
+        const r = await window.rpc.repairCheck();
+        if (r && r.ok && r.badCount > 0) {
+          toast('⚠️ 检测到 ' + r.badCount + ' 个关键文件缺失，点「更多 → 软件诊断 → 文件完整性」可一键修复', 7000);
+        }
+      } catch (e) { }
+    }, 1800);
+  }
+}
+
+async function refreshVoices() {
+  const btn = document.getElementById('refreshVoicesBtn');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ 扫描中…'; }
+  try {
+    state = await window.rpc.getState();
+    renderVoices();
+  // 恢复上次选择的界面（录音 / 实时）
+  try {
+    const rt = state.settings && state.settings.rtMode === 'realtime';
+    document.body.classList.toggle('rt-on', !!rt); moveSysPanel(!!rt);
+    rtSwitchLabel();
+    if (rt) {
+      const rc = (state.settings && state.settings.rtConfig) || {};
+      if (rc.sampleRate) $('rtSr').value = String(rc.sampleRate);
+      if (rc.blockSize) $('rtBlock').value = String(rc.blockSize);
+      if (rc.gain) { $('rtGain').value = String(rc.gain); }
+      rtPresetId = (state.settings && state.settings.rtPreset) || '';
+      rtRenderVoices();
+      if (rc.f0upKey != null && $('rtPitch')) { $('rtPitch').value = String(rc.f0upKey); }
+      if (rc.indexRate != null && $('rtRate')) { $('rtRate').value = String(rc.indexRate); }
+      if (rc.formant != null && $('rtFormant')) { $('rtFormant').value = String(rc.formant); }
+      const wantName = (state.settings && state.settings.rtVoice) || '';
+      if (wantName && state.voices) {
+        const vi = state.voices.findIndex((x) => x.name === wantName);
+        if (vi >= 0) rtSelIdx = vi;
+      }
+      rtLoadDevices().then(() => {
+        if (rc.inputDevice != null && $('rtIn')) $('rtIn').value = String(rc.inputDevice);
+        if (rc.outputDevice != null && $('rtOut')) $('rtOut').value = String(rc.outputDevice);
+      });
+    }
+  } catch (e) { }
+    const n = (state.voices || []).length;
+    if (btn) btn.textContent = '🔄 刷新声线列表';
+    toast('已刷新声线：共 ' + n + ' 个');
+  } catch (e) {
+    if (btn) btn.textContent = '🔄 刷新声线列表';
+    toast('❌ 刷新失败：' + (e && e.message), 4000);
+  } finally {
+    if (btn) btn.disabled = false;
+  }
+}
+
+function renderVoices() {
+  const g = $('voiceGrid'); g.innerHTML = '';
+  const emo = { '星野-中文': '😴', '日奈-中文': '🌙', '爱丽丝': '🤖', '白子': '🐺', '凯伊': '🖥️', '芹香-中文': '😺', '才羽桃井': '🎮', '才羽绿': '💚', '高松灯': '🎸' };
+  if (!state.voices.length) { g.innerHTML = '<div style="grid-column:1/3;font-size:12px;color:#aab;text-align:center;padding:14px">没有声线包<br>（去设置 → 声线包 里拖入安装）</div>'; return; }
+  state.voices.forEach((v, i) => {
+    const d = document.createElement('div');
+    d.className = 'vcard' + ((window._selVoiceName && v.name === window._selVoiceName) || (!window._selVoiceName && i === 0) ? ' sel' : '');
+    d.innerHTML = '<span class="chk">✓</span><span class="cropv" title="裁剪图片">✂️</span><span class="penv" title="重命名">✏️</span><span class="delv" title="删除">🗑️</span><span class="emo" style="display:none">无图片</span><img class="port" style="display:none"><div class="nm">' + v.name + '</div>';
+    d.onclick = () => {
+      if (window._selVoiceName === v.name) return; // 重复点击已选声线：不重复提示
+      const doSelect = () => {
+        document.querySelectorAll('.vcard').forEach((x) => x.classList.remove('sel'));
+        d.classList.add('sel');
+        window._selVoiceName = v.name;
+        playSnd('click');
+        log('已选择声线：' + v.name, 'info');
+      };
+      // 日配声线判定（三重保险）：1) 声线名 2) pth 文件名 3) config.json 的 online_id（如 Hoshino-JP）
+      const jpByName = /日配|日语|japanese|\bjp\b/i.test(v.name);
+      const jpByFile = /\bjp\b/i.test((v.pth || ''));
+      const jpByOnline = /-jp\b/i.test((v.onlineId || ''));
+      if (jpByName || jpByFile || jpByOnline) {
+        showJpWarn(doSelect);
+      } else {
+        doSelect();
+      }
+    };
+    g.appendChild(d);
+    const pen = d.querySelector('.penv');
+    let penT = null;
+    const chk = d.querySelector('.chk');
+    const del = d.querySelector('.delv');
+    const crop = d.querySelector('.cropv');
+    d.addEventListener('mouseenter', () => { penT = setTimeout(() => { pen.style.opacity = '1'; del.style.opacity = '1'; crop.style.opacity = '1'; if (chk) chk.style.display = 'none'; }, 50); });
+    d.addEventListener('mouseleave', () => { if (penT) clearTimeout(penT); pen.style.opacity = '0'; del.style.opacity = '0'; crop.style.opacity = '0'; if (chk) chk.style.display = ''; });
+    crop.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      window.rpc.getCover(v.cover).then((data) => {
+        if (!data) { toast('这个声线包没有图片，无法裁剪', 3000); return; }
+        cropVoiceCover(v.name, data);
+      });
+    });
+    del.addEventListener('click', async (ev) => {
+      ev.stopPropagation();
+      if (!confirm('确定删除声线「' + v.name + '」？\n将删除 Voice-LP 里的整个文件夹，并连同 Audio-RL 里对应的输出文件夹一起删除，不可恢复。')) return;
+      const r = await window.rpc.deleteVoice(v.name);
+      if (r && r.ok) {
+        toast('已删除「' + v.name + '」');
+        state = await window.rpc.getState();
+        renderVoices();
+  // 恢复上次选择的界面（录音 / 实时）
+  try {
+    const rt = state.settings && state.settings.rtMode === 'realtime';
+    document.body.classList.toggle('rt-on', !!rt); moveSysPanel(!!rt);
+    rtSwitchLabel();
+    if (rt) {
+      const rc = (state.settings && state.settings.rtConfig) || {};
+      if (rc.sampleRate) $('rtSr').value = String(rc.sampleRate);
+      if (rc.blockSize) $('rtBlock').value = String(rc.blockSize);
+      if (rc.gain) { $('rtGain').value = String(rc.gain); }
+      rtPresetId = (state.settings && state.settings.rtPreset) || '';
+      rtRenderVoices();
+      if (rc.f0upKey != null && $('rtPitch')) { $('rtPitch').value = String(rc.f0upKey); }
+      if (rc.indexRate != null && $('rtRate')) { $('rtRate').value = String(rc.indexRate); }
+      if (rc.formant != null && $('rtFormant')) { $('rtFormant').value = String(rc.formant); }
+      const wantName = (state.settings && state.settings.rtVoice) || '';
+      if (wantName && state.voices) {
+        const vi = state.voices.findIndex((x) => x.name === wantName);
+        if (vi >= 0) rtSelIdx = vi;
+      }
+      rtLoadDevices().then(() => {
+        if (rc.inputDevice != null && $('rtIn')) $('rtIn').value = String(rc.inputDevice);
+        if (rc.outputDevice != null && $('rtOut')) $('rtOut').value = String(rc.outputDevice);
+      });
+    }
+  } catch (e) { }
+      } else toast('✗ ' + ((r && r.msg) || '删除失败'), 4000);
+    });
+    pen.addEventListener('mouseenter', (ev) => { ev.stopPropagation(); pen.style.opacity = '1'; });
+    pen.addEventListener('click', (ev) => {
+      ev.stopPropagation();
+      const curIdx = i;
+      askText('重命名声线：' + v.name, v.name, async (nn) => {
+        if (!nn || nn === v.name) return;
+        const r = await window.rpc.renameVoice({ old: v.name, name: nn });
+        if (!r || !r.ok) { toast('✗ ' + ((r && r.msg) || '重命名失败'), 4000); return; }
+        toast('✅ 已重命名为「' + r.name + '」（Audio-RL 里对应的输出文件夹已同步改名）');
+        state = await window.rpc.getState();
+        renderVoices();
+  // 恢复上次选择的界面（录音 / 实时）
+  try {
+    const rt = state.settings && state.settings.rtMode === 'realtime';
+    document.body.classList.toggle('rt-on', !!rt); moveSysPanel(!!rt);
+    rtSwitchLabel();
+    if (rt) {
+      const rc = (state.settings && state.settings.rtConfig) || {};
+      if (rc.sampleRate) $('rtSr').value = String(rc.sampleRate);
+      if (rc.blockSize) $('rtBlock').value = String(rc.blockSize);
+      if (rc.gain) { $('rtGain').value = String(rc.gain); }
+      rtPresetId = (state.settings && state.settings.rtPreset) || '';
+      rtRenderVoices();
+      if (rc.f0upKey != null && $('rtPitch')) { $('rtPitch').value = String(rc.f0upKey); }
+      if (rc.indexRate != null && $('rtRate')) { $('rtRate').value = String(rc.indexRate); }
+      if (rc.formant != null && $('rtFormant')) { $('rtFormant').value = String(rc.formant); }
+      const wantName = (state.settings && state.settings.rtVoice) || '';
+      if (wantName && state.voices) {
+        const vi = state.voices.findIndex((x) => x.name === wantName);
+        if (vi >= 0) rtSelIdx = vi;
+      }
+      rtLoadDevices().then(() => {
+        if (rc.inputDevice != null && $('rtIn')) $('rtIn').value = String(rc.inputDevice);
+        if (rc.outputDevice != null && $('rtOut')) $('rtOut').value = String(rc.outputDevice);
+      });
+    }
+  } catch (e) { }
+        const cards = document.querySelectorAll('.vcard');
+        if (cards[curIdx]) { cards.forEach((x) => x.classList.remove('sel')); cards[curIdx].classList.add('sel'); }
+      }, '', translateName);
+    });
+    window.rpc.getCover(v.cover).then((data) => {
+      if (data) { const img = d.querySelector('.port'); img.src = data; img.style.display = 'block'; d.querySelector('.emo').style.display = 'none'; }
+      else d.querySelector('.emo').style.display = 'block';
+    });
+  });
+}
+
+function selVoice() {
+  // 优先按记住的名字找（广场开关/焦点刷新后不丢选中）
+  if (window._selVoiceName && state.voices) {
+    const byName = state.voices.find((v) => v.name === window._selVoiceName);
+    if (byName) return byName;
+  }
+  const i = [...document.querySelectorAll('.vcard')].findIndex((x) => x.classList.contains('sel'));
+  return (state.voices && state.voices[Math.max(0, i)]) || null;
+}
+
+function renderFiles() {
+  const l = $('fileList'); l.innerHTML = '';
+  files.forEach((f, i) => {
+    const c = document.createElement('span');
+    c.className = 'chip';
+    const name = f.split(/[\\/]/).pop();
+    const isVid = /\.(mp4|mov|mkv|avi|webm|m4v|flv|wmv)$/i.test(f);
+    c.innerHTML = '<span class="play" title="试听">' + (isVid ? '🎬' : '▶') + '</span><b>' + name + (isVid ? ' <i style="color:#2f7d4f;font-style:normal;font-size:10px">视频</i>' : '') + '</b><span class="x">✕</span>';
+    c.querySelector('.play').onclick = (ev) => {
+      ev.stopPropagation();
+      let a = document.getElementById('audioPreview');
+      if (!a) { a = document.createElement('audio'); a.id = 'audioPreview'; document.body.appendChild(a); }
+      a.src = 'rvc://media/' + encodeURIComponent(f);
+      a.play().catch(() => toast('⚠️ 无法播放这个音频', 2500));
+      toast('▶ 试听：' + f.split(/[\\/]/).pop(), 2500);
+    };
+    c.querySelector('.x').onclick = () => { files.splice(i, 1); renderFiles(); };
+    l.appendChild(c);
+  });
+}
+
+async function pickFiles() {
+  const r = await window.rpc.pickFiles();
+  if (r.length) { files = [...new Set([...files, ...r])]; renderFiles(); log('📥 已选 ' + r.length + ' 个文件', 'info'); }
+}
+
+// ── 动态按钮 ──
+function setBtn(mode) {
+  const b = $('goBtn');
+  b.querySelector('.btn-inner').textContent = mode === 'start' ? '▶ 开始转音' : '■ 结束转音';
+  b.classList.toggle('working', mode === 'stop');
+}
+async function goBtnClick() {
+  try {
+    if (!working) { playSnd('start'); await startConvert(); }
+    else { playSnd('click'); stopConvert(); }
+  } catch (e) {
+    const m = (e && e.message) || String(e);
+    try { log('❌ 转音异常：' + m, 'err'); } catch (e2) { }
+    try { toast('❌ 转音异常：' + m, 6000); } catch (e2) { }
+    try { working = false; setBtn('start'); } catch (e2) { }
+  }
+}
+
+async function startConvert() {
+  const v = selVoice();
+  if (!v) { log('⚠ 请先选择声线', 'err'); return; }
+  let targets = [...files];
+  if (!targets.length) {
+    const r = await window.rpc.getInputFiles();
+    targets = r.files;
+    if (!targets.length) { log('⚠ 没有音频：拖入文件或放「Audio-PA」', 'err'); return; }
+    log('使用 Audio-PA 的 ' + targets.length + ' 个文件', 'info');
+  }
+  const job = {
+    files: targets,
+    voice: { name: v.name, pth: v.pth, idx: v.idx },
+    pitch: $('pitch').value, index_rate: $('rate').value, protect: $('prot').value,
+    output_format: $('fmt').value, device: state.settings.device || 'cpu',
+    f0method: ($('f0') && $('f0').value) || state.settings.f0method || 'rmvpe',
+    torch_threads: ($('th') && $('th').value) || state.settings.torch_threads || '1',
+  };
+  const r = await window.rpc.startConvert(job);
+  if (r && r.error) { log('❌ ' + r.error, 'err'); return; }
+  working = true;
+  setBtn('stop');
+  $('progressWrap').classList.add('show');
+  $('log').innerHTML = '';
+  log('🚀 任务开始：' + targets.length + ' 个文件 → ' + v.name, 'info');
+}
+function stopConvert() { window.rpc.stopConvert(); log('■ 已请求停止…', 'info'); }
+function onDone() {
+  working = false; setBtn('start');
+  $('pfill').style.width = '100%';
+  setTimeout(() => { $('pfill').style.width = '0%'; $('progressWrap').classList.remove('show'); }, 3000);
+}
+
+window.rpc.onEvent((m) => {
+  try {
+    if (m && (m.type === 'stderr' || m.type === 'error')) window.__pushErr && window.__pushErr('[stderr] ' + String(m.text || m.message || m));
+    if (m && m.type === 'exit' && m.code) window.__pushErr && window.__pushErr('[exit] 引擎退出码 ' + m.code);
+    if (m && m.type === 'exit' && m.code === 0) { const el = document.getElementById('convLog'); if (el) { el.textContent = (document.getElementById('log') || {}).textContent || ''; } }
+  } catch (e) { }
+  if (m.type === 'log') log(m.msg);
+  else if (m.type === 'unpack-done') {
+    $('unpackBanner').classList.remove('show');
+    toast('✅ ' + m.kind + '包解压完成，压缩包已自动删除');
+    setTimeout(() => { refreshState(); renderVoices(); }, 800); // 文件系统稳定后再刷新声线列表
+  }
+  else if (m.type === 'unpack-fail') { $('unpackBanner').classList.remove('show'); toast('❌ ' + m.kind + '包解压失败', 4000); }
+  else if (m.type === 'refresh') refreshState();
+  else if (m.type === 'progress') { $('pfill').style.width = Math.round((m.i / m.n) * 100) + '%'; $('pinfo').textContent = '[' + (m.i + 1) + '/' + m.n + '] ' + m.file; }
+  else if (m.type === 'done') {
+    log('🎉 全部完成！成功 ' + m.ok + '/' + m.total, 'ok');
+    log('📂 结果：' + m.out_dir, 'info');
+    onDone(); playSnd('done');
+    // 记录历史
+    try {
+      const hist = JSON.parse(localStorage.getItem('rvc_hist') || '[]');
+      hist.push({ voice: selVoice() ? selVoice().name : '?', ok: m.ok, total: m.total, time: new Date().toLocaleString('zh-CN') });
+      localStorage.setItem('rvc_hist', JSON.stringify(hist.slice(-200)));
+    } catch { }
+    toast('🎉 转换完成！成功 ' + m.ok + '/' + m.total, 4000, { text: '打开文件夹', fn: () => window.rpc.openFolder(m.out_dir) });
+  }
+  else if (m.type === 'error') { log('❌ ' + m.msg, 'err'); onDone(); }
+  else if (m.type === 'exit') {
+    if (m.error) { log('❌ ' + m.error, 'err'); onDone(); }
+    else if (working) { log('⚠ 引擎进程退出（code ' + m.code + '）', 'err'); onDone(); }
+  }
+  else if (m.type === 'raw') {
+    const s = String(m.msg || '').trim();
+    if (s) log('[引擎] ' + s.split('\n').slice(-2).join(' '), 'info');
+  }
+});
+
+// ── 拖拽音频 ──
+const drop = $('drop');
+document.addEventListener('dragover', (e) => { e.preventDefault(); drop.classList.add('over'); });
+document.addEventListener('dragleave', (e) => { e.preventDefault(); drop.classList.remove('over'); });
+document.addEventListener('drop', (e) => {
+  e.preventDefault(); drop.classList.remove('over');
+  const paths = [...e.dataTransfer.files].map((f) => window.rpc.getPathForFile(f)).filter(Boolean);
+  const aud = paths.filter((p) => /\.(mp3|wav|m4a|flac|ogg|aac|wma|mp4|mov|mkv|avi|webm|m4v)$/i.test(p));
+  if (aud.length) { files = [...new Set([...files, ...aud])]; renderFiles(); log('📥 拖入 ' + aud.length + ' 个文件', 'info'); }
+});
+
+// ── Edge 式设置页 ──
+function openSettings(t) { renderSettings(t || 'look'); $('ov-settings').classList.add('show'); setTimeout(fillSavedBg, 0); }
+function setTab(t) {
+  document.querySelectorAll('.sitem').forEach((x) => x.classList.toggle('act', x.dataset.tab === t));
+  renderSettings(t);
+}
+function makeSwitch(label, desc, id, val) {
+  return '<div class="set-row"><div><div class="t">' + label + '</div><div class="d">' + desc + '</div></div><div class="sw' + (val ? ' on' : '') + '" id="' + id + '"></div></div>';
+}
+
+function swatchRow(label, list, cur) {
+  return '<div class="color-row"><span class="cr-label">' + label + '</span>' +
+    list.map((c) => '<div class="swatch-item' + (cur === c[0] ? ' sel' : '') + '" style="background:' + c[0] + '" title="' + c[1] + '" onclick="setBgColor(\'' + c[0].replace(/'/g, '') + '\')"></div>').join('') +
+    '</div>';
+}
+async function setBgColor(css) {
+  state.settings = await window.rpc.saveSettings({ bgMode: 'color', bgColor: css, bgFile: '' });
+  applySettings();
+  renderSettings('look');
+}
+let recKey = null;
+function recordHotkey(k) {
+  recKey = k;
+  const el = $('hk-' + k);
+  el.classList.add('rec');
+  el.textContent = '按下组合键…';
+}
+document.addEventListener('keydown', (e) => {
+  if (recKey) {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.key === 'Escape' || e.key === 'Backspace') {
+      const hk = { ...(state.settings.hotkeys || {}) };
+      hk[recKey] = '';
+      state.settings = { ...state.settings, hotkeys: hk };
+      window.rpc.saveSettings({ hotkeys: hk });
+      recKey = null;
+      renderSettings('keys');
+      return;
+    }
+    if (['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) return;
+    let combo = [];
+    if (e.ctrlKey) combo.push('Ctrl');
+    if (e.altKey) combo.push('Alt');
+    if (e.shiftKey) combo.push('Shift');
+    combo.push(e.key.length === 1 ? e.key.toUpperCase() : e.key);
+    const hk = { ...(state.settings.hotkeys || {}) };
+    hk[recKey] = combo.join('+');
+    state.settings = { ...state.settings, hotkeys: hk };
+    window.rpc.saveSettings({ hotkeys: hk });
+    const savedKey = recKey;
+    recKey = null;
+    toast('✅ 快捷键已设为 ' + hk[savedKey]);
+    renderSettings('keys');
+    return;
+  }
+  // 自定义快捷键匹配（仅在无输入焦点时）
+  const tag = document.activeElement && document.activeElement.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+  if (e.key === 'Escape') { document.querySelectorAll('.overlay.show').forEach((o) => o.classList.remove('show')); return; }
+  const hk = (state && state.settings && state.settings.hotkeys) || {};
+  const cur = [];
+  if (e.ctrlKey) cur.push('Ctrl');
+  if (e.altKey) cur.push('Alt');
+  if (e.shiftKey) cur.push('Shift');
+  cur.push(e.key.length === 1 ? e.key.toUpperCase() : e.key);
+  const combo = cur.join('+');
+  if (hk.convert && combo === hk.convert) { e.preventDefault(); goBtnClick(); }
+  else if (hk.files && combo === hk.files) { e.preventDefault(); pickFiles(); }
+  else if (hk.in && combo === hk.in) { e.preventDefault(); window.rpc.openFolder(state.inputDir); }
+  else if (hk.out && combo === hk.out) { e.preventDefault(); window.rpc.openFolder(state.outputDir); }
+}, true);
+
+function clearHist() {
+  localStorage.removeItem('rvc_hist');
+  renderSettings('hist');
+  toast('🗑 历史已清空');
+}
+
+function renderSettings(t) {
+  const tab = t || 'look';
+  const c = $('setContent');
+  const s = state.settings;
+  if (c) c.removeAttribute('data-no-mars');
+  if (tab === 'look') {
+    c.innerHTML = '<span class="close-x" onclick="document.getElementById(\'ov-settings\').classList.remove(\'show\')">✕</span><h3>🎨 外观</h3>' +
+      '<div class="t" style="font-size:13px;color:#445">主题</div><div class="theme-cards">' +
+      '<div class="tcard' + (s.theme === 'pink' ? ' sel' : '') + '" onclick="setTheme(\'pink\')"><div class="swatch" style="background:linear-gradient(90deg,#6a9ef5,#e86c9f)"></div>粉蓝</div>' +
+      '<div class="tcard' + (s.theme === 'night' ? ' sel' : '') + '" onclick="setTheme(\'night\')"><div class="swatch" style="background:linear-gradient(90deg,#3a4a8c,#7a4a98)"></div>紫夜</div>' +
+      '<div class="tcard' + (s.theme === 'mint' ? ' sel' : '') + '" onclick="setTheme(\'mint\')"><div class="swatch" style="background:linear-gradient(90deg,#35c48e,#3aa7c9)"></div>薄荷</div>' +
+      '</div>' +
+      '<div class="t" style="font-size:13px;color:#445;margin-top:14px">背景</div>' +
+      '<div class="bgbtns">' +
+      '<button class="sbtn' + (s.bgMode === 'white' ? ' primary' : '') + '" onclick="setBgColor(\'#ffffff\')">⬜ 纯白</button>' +
+      '<button class="sbtn' + (s.bgMode === 'image' ? ' primary' : '') + '" onclick="uploadBgImg()">🖼️ 上传图片</button>' +
+      '<button class="sbtn' + (s.bgMode === 'video' ? ' primary' : '') + '" onclick="uploadBgVid()">🎬 上传视频</button>' +
+      '<div id="bgDropHead" style="display:inline-flex;align-items:center;gap:6px;cursor:pointer;user-select:none;border:1px solid #dfe3f2;border-radius:9px;padding:7px 11px;background:#fff;flex-shrink:0;width:230px;box-sizing:border-box;justify-content:flex-start">' +
+        '<span style="font-size:12.5px;color:#445;white-space:nowrap">保存的壁纸</span>' +
+        '<span id="bgDropArrow" style="font-size:11px;color:#889;transition:transform .25s">▼</span>' +
+        '<span id="bgDropCount" style="font-size:11px;color:#aab;white-space:nowrap"></span>' +
+      '</div>' +
+      '<label class="sw-toggle" title="上传壁纸时自动压缩到1080P"><input type="checkbox" id="bgCompressChk"><span class="sl"></span></label>' +
+      
+
+      '</div>' +
+      '</div>' +
+      '<div class="t" style="font-size:13px;color:#445;margin-top:10px">纯色</div>' +
+      swatchRow('纯色', SOLID_COLORS, s.bgMode === 'color' ? s.bgColor : null) +
+      '<div class="t" style="font-size:13px;color:#445;margin-top:10px">混合渐变</div>' +
+      swatchRow('渐变', GRAD_COLORS, s.bgMode === 'color' ? s.bgColor : null) +
+      '<div class="hint">💡 图片支持 png/jpg/webp；视频支持 mp4/webm（循环播放）。背景模式下界面面板为半透明白。<br>「保存的壁纸」里<u>右键壁纸项可直接删除</u>，不用去文件夹找。</div>';
+    setTimeout(() => {
+      const l = $('savedBgList'); const hd = $('bgDropHead'); const ar = $('bgDropArrow');
+      if (hd && l) {
+        hd.onclick = () => {
+          const open = l.classList.toggle('open');
+          l.style.maxHeight = open ? '460px' : '0px';
+          if (ar) ar.style.transform = open ? 'rotate(180deg)' : '';
+          if (open) fillSavedBg();
+        };
+        const wasOpen = l.classList.contains('open');
+        l.style.maxHeight = wasOpen ? '460px' : '0px';
+        if (wasOpen) fillSavedBg();
+      }
+      const bc = $('bgCompressChk');
+      if (bc && !bc._b) {
+        bc._b = true;
+        bc.checked = !!(state.settings && state.settings.bgCompress);
+        bc.onclick = (e) => e.stopPropagation();
+        bc.onchange = () => { window.rpc.saveSettings({ bgCompress: bc.checked }).catch(() => { }); };
+      }
+      const c = $('bgDropCount');
+      if (c) window.rpc.listBg().then((x) => { c.textContent = '（' + x.length + ' 个）'; }).catch(() => { });
+    }, 0);
+  } else if (tab === 'perf') {
+    c.innerHTML = '<span class="close-x" onclick="document.getElementById(\'ov-settings\').classList.remove(\'show\')">✕</span><h3>⚡ 性能（按电脑配置选）</h3>' +
+      '<div class="perf-cards">' +
+      '<div class="pcard' + (s.perf === 'low' ? ' sel' : '') + '" onclick="setPerf(\'low\')"><b>🐌 低配</b><span>老电脑/内存小<br>关特效最流畅</span></div>' +
+      '<div class="pcard' + (s.perf === 'mid' ? ' sel' : '') + '" onclick="setPerf(\'mid\')"><b>⚖️ 中配</b><span>默认均衡<br>适量特效</span></div>' +
+      '<div class="pcard' + (s.perf === 'high' ? ' sel' : '') + '" onclick="setPerf(\'high\')"><b>🚀 高配</b><span>性能强<br>全特效拉满</span></div>' +
+      '</div>' +
+      makeSwitch('粒子特效', '背景飘浮光点（低配建议关）', 'sw-particles', s.particles !== false) +
+      makeSwitch('界面动画', '卡片/按钮过渡动画', 'sw-anim', s.animations !== false) +
+      makeSwitch('提示音效', '操作/完成提示音', 'sw-sounds', s.sounds !== false) +
+      '<div class="set-row"><div><div class="t">推理设备</div><div class="d">NVIDIA 选 cuda，AMD 选 dml（更快；没有就 CPU）</div></div><select id="perf-device" style="padding:6px;border-radius:8px;border:1.5px solid #dfe3f2" onchange="savePatch({device:this.value})">' +
+      '<option value="cpu"' + ((s.device || 'cpu') === 'cpu' ? ' selected' : '') + '>CPU（通用）</option>' +
+      '<option value="cuda"' + (s.device === 'cuda' ? ' selected' : '') + '>NVIDIA (cuda)</option>' +
+      '<option value="dml"' + (s.device === 'dml' ? ' selected' : '') + '>AMD/Intel (dml)</option></select></div>' +
+      '<div class="set-row"><div><div class="t">音高算法</div><div class="d">内存不足时选 pm（极速）或 harvest（轻量）；rmvpe 最准但吃内存</div></div><select id="perf-f0" style="padding:6px;border-radius:8px;border:1.5px solid #dfe3f2" onchange="savePatch({f0method:this.value})">' +
+      '<option value="pm"' + (s.f0method === 'pm' ? ' selected' : '') + '>pm（极速省内存）</option>' +
+      '<option value="harvest"' + (s.f0method === 'harvest' ? ' selected' : '') + '>harvest（轻量）</option>' +
+      '<option value="crepe"' + (s.f0method === 'crepe' ? ' selected' : '') + '>crepe（较准）</option>' +
+      '<option value="rmvpe"' + ((s.f0method || 'rmvpe') === 'rmvpe' ? ' selected' : '') + '>rmvpe（最准）</option></select></div>' +
+      '<div class="hint">💡 电脑内存小（4GB 以下）建议选 pm 或 harvest，转音时关闭 QQ/浏览器等程序。</div>';
+  } else if (tab === 'keys') {
+    const hk = s.hotkeys || {};
+    const items = [['convert', '开始/停止转音'], ['files', '选择音频文件'], ['in', '打开输入文件夹'], ['out', '打开结果文件夹']];
+    c.innerHTML = '<span class="close-x" onclick="document.getElementById(\'ov-settings\').classList.remove(\'show\')">✕</span><h3>⌨️ 自定义快捷键（默认无）</h3>' +
+      items.map(([k, name]) => '<div class="hk-row"><div class="t">' + name + '</div><div class="hk-box' + (hk[k] ? '' : '') + '" id="hk-' + k + '" onclick="recordHotkey(\'' + k + '\')">' + (hk[k] || '点击设置') + '</div></div>').join('') +
+      '<div class="hint">💡 点击右侧框 → 按下想要的组合键（如 Ctrl+Shift+K）→ 自动保存。<br>按 <b>Esc</b> 或 <b>Backspace</b> 清除。默认全部无快捷键。</div>';
+  } else if (tab === 'mobile') {
+    const mt = s.mobileToken || '';
+    c.innerHTML = '<span class="close-x" onclick="document.getElementById(\'ov-settings\').classList.remove(\'show\')">✕</span><h3>📱 手机端（局域网/外网）</h3>' +
+      '<div class="set-row"><div><div class="t">手机模式</div><div class="d">开启后手机浏览器访问下面的地址即可转音（电脑需保持开机）</div></div><div class="sw' + (mobileOn ? ' on' : '') + '" id="sw-mobile"></div></div>' +
+      '<div class="set-row"><div><div class="t">访问密码</div><div class="d">留空 = 无密码（仅建议局域网用）；外网访问务必设置</div></div></div>' +
+      '<input id="mt-pw" type="text" placeholder="设置访问密码（留空=无密码）" value="' + mt + '" style="width:100%;padding:9px;border:1.5px solid #dfe3f2;border-radius:8px;font-size:13px">' +
+      '<div class="bgbtns"><button class="sbtn primary" id="mt-save">💾 保存密码</button></div>' +
+      '<div class="hint" id="mobileUrl">当前状态：' + (mobileOn ? '已开启' : '未开启') + '<br>局域网地址：' + (mobileUrl || '（开启后显示）') + '<br><br>💡 外网访问：需配合内网穿透（ZeroTier/Cloudflare Tunnel 等），穿透后手机访问对应地址并输入上面的密码。<br>手机上传音频 → 电脑转换（约 1-5 分钟/条）→ 手机下载结果。</div>';
+    const sm = $('sw-mobile');
+    if (sm) sm.onclick = async () => {
+      const next = !mobileOn;
+      const r = await window.rpc.mobileServer(next);
+      mobileOn = next;
+      if (next && r && r.url) mobileUrl = r.url;
+      else if (!next) mobileUrl = '';
+      renderSettings('mobile');
+    };
+    const ms = $('mt-save');
+    if (ms) ms.onclick = async () => {
+      await window.rpc.saveSettings({ mobileToken: $('mt-pw').value.trim() });
+      state = await window.rpc.getState();
+      toast('✅ 访问密码已保存');
+    };
+  } else if (tab === 'hist') {
+    let hist = [];
+    try { hist = JSON.parse(localStorage.getItem('rvc_hist') || '[]'); } catch { }
+    c.innerHTML = '<span class="close-x" onclick="document.getElementById(\'ov-settings\').classList.remove(\'show\')">✕</span><h3>📜 转换历史</h3>' +
+      (hist.length ? hist.slice().reverse().map((h) => '<div class="hist-item"><span>' + h.voice + ' × ' + h.ok + '/' + h.total + '</span><span class="t">' + h.time + '</span></div>').join('') : '<div style="color:#aab;font-size:12px">还没有转换记录</div>') +
+      (hist.length ? '<div class="bgbtns"><button class="sbtn" onclick="clearHist()">🗑 清空历史</button></div>' : '');
+  } else if (tab === 'packs') {
+    c.innerHTML = '<span class="close-x" onclick="document.getElementById(\'ov-settings\').classList.remove(\'show\')">✕</span><h3>🎭 声线包管理</h3>' +
+      '<div style="display:flex;align-items:center;gap:8px;margin:0 0 8px"><button class="sbtn" id="refreshVoicesBtn" onclick="refreshVoices()">🔄 刷新声线列表</button><span style="font-size:11px;color:#aab">新增/删除声线后点此重新扫描</span></div>' +
+      '<div class="pack-drop" id="packDrop"><div style="font-size:28px">📦</div><b>把声线包文件夹拖到这里</b> 或 <a style="color:var(--ac);cursor:pointer">点击选择</a><br><span style="font-size:11px">自动安装到 Voice-LP</span></div>' +
+      '<div class="t" style="font-size:13px;color:#445">已安装（' + state.voices.length + ' 个）</div>' +
+      '<div class="pack-list">' + (state.voices.map((v) => '· ' + v.name).join('<br>') || '（空）') + '</div>' +
+      '<div class="hint">📐 人物立绘：支持 png / jpg / jpeg / webp，放进声线包文件夹自动识别为头像。<br>推荐比例：<b>8:5</b>（横版），图片会完整显示、不会被裁剪。</div>';
+  } else if (tab === 'lang') {
+    const cur = (s && s.lang) || 'zh';
+    const langs = [
+      ['zh', '简体中文'], ['en', '英语'], ['ja', '日语'], ['ko', '韩语'],
+      ['fr', '法语'], ['de', '德语'], ['es', '西班牙语'], ['ru', '俄语'],
+      ['pt', '葡萄牙语'], ['ar', '阿拉伯语'], ['mars', '🔥 ' + (cur === 'mars' ? '⿻⻱≿' : '火星文')],
+    ];
+    c.innerHTML = '<span class="close-x" onclick="document.getElementById(\'ov-settings\').classList.remove(\'show\')">✕</span><h3>🌐 界面语言</h3>' +
+      '<div class="perf-cards" style="flex-wrap:wrap">' +
+      langs.map((x) => '<div class="pcard' + (cur === x[0] ? ' sel' : '') + '" style="flex:0 0 30%;min-width:120px" onclick="setLang(\'' + x[0] + '\')"><b>' + x[1] + '</b></div>').join('') +
+      '</div>' +
+      '<div class="hint">💡 界面与声线包语言一起切换；选择后自动重启软件生效。火星文会把界面文字变成乱码（整活用）。</div>' +
+      '<div style="font-size:11px;color:#aab;margin-top:6px">（暂未更新）</div>';
+    c.setAttribute('data-no-mars', '1');
+  } else {
+    c.innerHTML = '<span class="close-x" onclick="document.getElementById(\'ov-settings\').classList.remove(\'show\')">✕</span><h3>ℹ️ 关于</h3>' +
+      '<div style="font-size:13px;color:#556;line-height:2">' +
+      '<b>RVC 声线转音</b> v' + VERSION + '<br>' +
+      '蔚蓝档案角色声线转换工具（便携版）<br><br>' +
+      '目录结构（相对路径，整个文件夹随便移动）：<br>' +
+      '&nbsp;&nbsp;RVC VTFM/<br>' +
+      '&nbsp;&nbsp;├ Audio-PA（放音频）<br>' +
+      '&nbsp;&nbsp;├ Audio-RL（转音结果）<br>' +
+      '&nbsp;&nbsp;├ Voice-LP（声线包）<br>' +
+      '&nbsp;&nbsp;├ Engine/（RVC 引擎）<br>' +
+      '&nbsp;&nbsp;└ CRVC VTFM/（程序）<br><br>' +
+      '🐋 为大肥鱼打造 · 开源免费<br>' +
+      '<div style="text-align:center;margin-top:10px;padding-top:10px;border-top:1px solid #eef0f6">' +
+      '<div style="font-size:12px;color:#99a;margin-bottom:8px">💗 如果觉得好用，欢迎请大肥鱼喝杯奶茶</div>' +
+      '<img src="zanshang.png" style="width:220px;height:220px;border-radius:12px;box-shadow:0 2px 10px rgba(70,80,140,.15)" alt="赞赏码">' +
+      '</div>' +
+      '<button class="sbtn" style="margin-top:8px" onclick="document.getElementById(\'ov-settings\').classList.remove(\'show\')">关闭</button>' +
+      '</div>';
+  }
+  // 开关绑定
+  const swMap = { 'sw-particles': 'particles', 'sw-anim': 'animations', 'sw-sounds': 'sounds' };
+  Object.keys(swMap).forEach((id) => {
+    const el = $(id);
+    if (el) el.onclick = async () => {
+      const key = swMap[id];
+      const cur = state.settings[key] !== false;
+      state.settings = await window.rpc.saveSettings({ [key]: !cur });
+      applySettings();
+      el.classList.toggle('on', !cur);
+    };
+  });
+  // 声线包拖放
+  const pd = $('packDrop');
+  if (pd) {
+    pd.addEventListener('dragover', (e) => { e.preventDefault(); pd.classList.add('over'); });
+    pd.addEventListener('dragleave', () => pd.classList.remove('over'));
+    pd.addEventListener('click', async () => {
+      const p = await window.rpc.pickDir();
+      if (!p) return;
+      const r = await window.rpc.installVoicePack(p);
+      if (r.ok) { toast('✅ 声线包「' + r.name + '」已安装'); state = await window.rpc.getState(); renderVoices(); renderSettings(tab); }
+      else toast('❌ ' + r.msg, 4000);
+    });
+    pd.addEventListener('drop', async (e) => {
+      e.preventDefault(); pd.classList.remove('over');
+      const p = window.rpc.getPathForFile(e.dataTransfer.files[0]);
+      if (!p) return;
+      const r = await window.rpc.installVoicePack(p);
+      if (r.ok) { toast('✅ 声线包「' + r.name + '」已安装'); state = await window.rpc.getState(); renderVoices(); renderSettings(tab); }
+      else toast('❌ ' + r.msg, 4000);
+    });
+  }
+}
+
+async function savePatch(patch) {
+  state.settings = await window.rpc.saveSettings(patch);
+  applySettings();
+}
+function setTheme(t) { savePatch({ theme: t }); renderSettings('look'); }
+function setPerf(p) { savePatch({ perf: p }); renderSettings('perf'); }
+async function setLang(id) {
+  try {
+    await window.rpc.saveSettings({ lang: id });
+    await window.rpc.relaunchApp();
+  } catch (e) { }
+}
+// ── 火星文：汉字随机替换成混合乱码（繁中/简中/英文/日语/俄语/其它语言/符号/乱码，随机防规律）──
+const MARS_POOL =
+  // 繁体中文（一般）
+  '體臺灣戀愛風雲龍鳳龜齒鳥馬魚車門東長書無聽見說話讀寫歲時發現開關學習問答題國語歷史戰爭經濟環境醫療藝術音樂電影' +
+  // 简体中文（极少）
+  '的了在是有我你他她它' +
+  // 英文字母（较少）
+  'ABCXYZabcxyz' +
+  // 日语（少）
+  'あいうえおかきくけこさしすせそたちつてとアイウエオカキクケコサシスセソ' +
+  // 俄语字母（一般）
+  'АБВГДЕЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯабвгдежзийклмнопрстуфхцчшщъыьэюя' +
+  // 其它国家语言（一般偏较少）：希腊 + 阿拉伯
+  'αβγδεζηθικλμνξοπρστυφχψωصقفعكلمنهوي' +
+  // 符号（较少）
+  '！@#￥%……&*（）{}【】；‘、：“|，。/《》？.+-*"°' +
+  // 乱码（较少）
+  '€£§¥©⁜※〆々〰『』〘〛⻱⿻≿' +
+  // 黑色三角形/正方形带问号（较高，多放几次加权）
+  '⍰\uFFFD\uFFFD\uFFFD▲▲■■⍰\uFFFD\uFFFD⍰\uFFFD\uFFFD\uFFFD⍰\uFFFD';
+function marsStr(s) {
+  return String(s).replace(/[\u4e00-\u9fff]/g, () => MARS_POOL[Math.floor(Math.random() * MARS_POOL.length)]);
+}
+const marsSeen = new WeakSet();
+function marsify(root) {
+  const skip = /^(SCRIPT|STYLE|TEXTAREA|INPUT|OPTION|CANVAS)$/;
+  const inNoMars = (n) => {
+    let p = n;
+    while (p && p.nodeType === 1) {
+      if (p.getAttribute && p.getAttribute('data-no-mars')) return true;
+      p = p.parentElement;
+    }
+    return false;
+  };
+  const walk = (n) => {
+    if (n.nodeType === 3) {
+      if (marsSeen.has(n) || inNoMars(n)) return;
+      const t = n.textContent;
+      if (/[\u4e00-\u9fff]/.test(t)) n.textContent = marsStr(t);
+      marsSeen.add(n);
+    } else if (n.nodeType === 1 && !skip.test(n.tagName)) {
+      if (inNoMars(n)) return;
+      for (const c of Array.from(n.childNodes)) walk(c);
+    }
+  };
+  walk(root || document.body);
+}
+let marsObserver = null;
+function startMars() {
+  if (marsObserver) return;
+  marsify(document.body);
+  marsObserver = new MutationObserver((muts) => {
+    for (const m of muts) {
+      for (const n of Array.from(m.addedNodes || [])) {
+        if (n.nodeType === 1 || n.nodeType === 3) marsify(n);
+      }
+      if (m.type === 'characterData' && m.target && !marsSeen.has(m.target)) marsify(m.target);
+    }
+  });
+  marsObserver.observe(document.body, { childList: true, subtree: true, characterData: true });
+}
+async function uploadBgImg() {
+  const p = await window.rpc.pickImage();
+  if (!p) return;
+  const r = await window.rpc.setBackground(p);
+  if (r.ok) {
+    await window.rpc.saveSettings({ bgFile: r.bgFile, bgMode: r.bgMode });
+    state = await window.rpc.getState();
+    renderSettings('look');
+    applySettings();
+    setTimeout(applySettings, 120);
+    toast('✅ 图片背景已设置：' + (r.bgFile || '') + (r.compressed ? '（已压缩到1080P）' : ''));
+  }
+  else toast('❌ ' + r.msg, 4000);
+}
+async function uploadBgVid() {
+  const bc0 = $('bgCompressChk');
+    if (bc0 && bc0.checked) toast('正在压缩视频到 1080P，请稍候', 6000);
+    const p = await window.rpc.pickVideo();
+  if (!p) return;
+  const r = await window.rpc.setBackground(p);
+  if (r.ok) {
+    await window.rpc.saveSettings({ bgFile: r.bgFile, bgMode: r.bgMode });
+    state = await window.rpc.getState();
+    renderSettings('look');
+    applySettings();
+    setTimeout(applySettings, 120);
+    toast('✅ 视频背景已设置：' + (r.bgFile || '') + (r.compressed ? '（已压缩到1080P）' : ''));
+  }
+  else toast('❌ ' + r.msg, 4000);
+}
+async function clearBg() {
+  await window.rpc.clearBackground();
+  state = await window.rpc.getState();
+  applySettings(); renderSettings('look');
+}
+
+$('pickLink').onclick = pickFiles;
+$('goBtn').onclick = goBtnClick;
+$('inBtn').onclick = () => window.rpc.openFolder(state.inputDir);
+$('outBtn').onclick = () => window.rpc.openFolder(state.outputDir);
+$('clearInBtn').onclick = async () => {
+  const r = await window.rpc.clearInput();
+  if (r.ok) { toast('🗑 Audio-PA 已清空'); files = []; renderFiles(); }
+  else toast('❌ ' + r.msg, 4000);
+};
+// ── 实时变声 ──
+let rtRunning = false;
+let rtPresetId = '';
+let rtPresets = [];
+function rtLog(msg) {
+  const el = $('rtLog');
+  if (!el) return;
+  const t = new Date().toLocaleTimeString('zh-CN', { hour12: false });
+  el.textContent += '[' + t + '] ' + msg + '\n';
+  el.scrollTop = el.scrollHeight;
+}
+function rtSetState(txt, on) {
+  const s = $('rtState'); const d = $('rtDot');
+  if (s) s.textContent = txt;
+  if (d) d.classList.toggle('on', !!on);
+}
+function rtSwitchLabel() {
+  const on = document.body.classList.contains('rt-on');
+  const b = $('rtSwitch');
+  if (b) b.title = on ? '点击切换录音转音界面' : '点击切换实时转音界面';
+}
+// 系统状态面板随界面切换移动到正确容器（否则 rt-on 下会被 display:none 隐藏而"消失"）
+function moveSysPanel(toRt) {
+  const sys = $('sysPanel');
+  if (!sys) return;
+  if (toRt) {
+    const slot = $('rtSysSlot');
+    if (slot && sys.parentElement !== slot) slot.appendChild(sys);
+  } else {
+    const left = $('left');
+    if (left && sys.parentElement !== left) left.appendChild(sys);
+  }
+}
+async function toggleRealtime() {
+  const on = !document.body.classList.contains('rt-on');
+  document.body.classList.toggle('rt-on', on);
+  rtSwitchLabel();
+  playSnd('click');
+  try { await window.rpc.saveSettings({ rtMode: on ? 'realtime' : 'record' }); state.settings.rtMode = on ? 'realtime' : 'record'; } catch (e) { }
+  if (on) {
+    const sys = $('sysPanel');
+    const slot = $('rtSysSlot');
+    if (sys && slot && sys.parentElement !== slot) slot.appendChild(sys);
+    rtLoadDevices();
+    rtRenderVoices();
+  } else {
+    if (rtRunning) rtToggle();
+    const sys = $('sysPanel');
+    const left = $('left');
+    if (sys && left && sys.parentElement !== left) left.appendChild(sys);
+  }
+}
+let rtSelIdx = 0;
+function rtRenderVoices() {
+  const g = $('rtVoiceGrid');
+  if (!g) return;
+  g.innerHTML = '';
+  const list = (state && state.voices) || [];
+  if (!list.length) {
+    g.innerHTML = '<div style="grid-column:1/3;font-size:12px;color:#aab;text-align:center;padding:12px">没有声线包<br>（去设置 → 声线包 安装）</div>';
+    return;
+  }
+  list.forEach((v, i) => {
+    const d = document.createElement('div');
+    d.className = 'vcard' + (i === rtSelIdx ? ' sel' : '');
+    d.innerHTML = '<span class="chk">✓</span><span class="emo" style="display:none">无图片</span><img class="port" style="display:none"><div class="nm">' + v.name + '</div>';
+    d.onclick = () => {
+      g.querySelectorAll('.vcard').forEach((x) => x.classList.remove('sel'));
+      d.classList.add('sel');
+      rtSelIdx = i;
+      playSnd('click');
+      rtLog('已选择声线：' + v.name + (rtRunning ? '（重启后生效）' : ''));
+    };
+    g.appendChild(d);
+    window.rpc.getCover(v.cover).then((data) => {
+      if (data) { const img = d.querySelector('.port'); img.src = data; img.style.display = 'block'; d.querySelector('.emo').style.display = 'none'; }
+      else d.querySelector('.emo').style.display = 'block';
+    });
+  });
+}
+async function rtLoadDevices() {
+  const inSel = $('rtIn'), outSel = $('rtOut');
+  if (!inSel || inSel.dataset.loaded === '1') return;
+  inSel.innerHTML = '<option value="">加载中…</option>';
+  outSel.innerHTML = '<option value="">加载中…</option>';
+  const r = await window.rpc.realtimeDevices();
+  if (!r || !r.ok) {
+    inSel.innerHTML = '<option value="">加载失败</option>';
+    outSel.innerHTML = '<option value="">加载失败</option>';
+    rtLog('设备枚举失败：' + ((r && r.msg) || '未知错误'));
+    return;
+  }
+  const d = r.data.data || {};
+  const fill = (sel, list, defIdx, recommend) => {
+    sel.innerHTML = '<option value="">系统默认</option>' + (list || []).map((x) =>
+      '<option value="' + x.index + '">' + x.name.replace(/</g, '') + ' (' + x.sampleRate + 'Hz)</option>').join('');
+    let pick = '';
+    if (recommend) {
+      const m = (list || []).find((x) => x.name.indexOf(recommend) >= 0);
+      if (m) pick = String(m.index);
+    }
+    if (!pick && defIdx != null && defIdx >= 0) {
+      const m = (list || []).find((x) => x.index === defIdx);
+      if (m) pick = String(m.index);
+    }
+    if (pick) sel.value = pick;
+  };
+  fill(inSel, d.input, (d.default || [])[0], null);
+  fill(outSel, d.output, (d.default || [])[1], 'CABLE Input');
+  inSel.dataset.loaded = '1';
+  rtLog('检测到 ' + (d.input || []).length + ' 个输入设备、' + (d.output || []).length + ' 个输出设备');
+}
+async function rtLoadPresets() {
+  const box = $('rtPresets');
+  if (!box || box.dataset.loaded === '1') return;
+  box.innerHTML = '<span style="font-size:12px;color:#aab">加载中…</span>';
+  const r = await window.rpc.realtimePresets();
+  const list = (r && r.ok && r.data && r.data.data) || [];
+  rtPresets = list;
+  if (!list.length) { box.innerHTML = '<span style="font-size:12px;color:#aab">没有可用预设</span>'; return; }
+  box.innerHTML = '<button class="rt-pr" data-id="">原声直通</button>' + list.map((x) =>
+    '<button class="rt-pr" data-id="' + x.id + '">' + (x.name || x.id) + '</button>').join('');
+  box.querySelectorAll('.rt-pr').forEach((b) => {
+    b.onclick = async () => {
+      rtPresetId = b.dataset.id || '';
+      box.querySelectorAll('.rt-pr').forEach((y) => y.classList.toggle('sel', y === b));
+      playSnd('click');
+      if (rtRunning) {
+        const r2 = await window.rpc.realtimeCmd({ cmd: 'preset', id: rtPresetId });
+        if (!r2 || !r2.ok) toast('切换失败：' + ((r2 && r2.msg) || ''), 3000);
+      }
+    };
+  });
+  const first = box.querySelector('.rt-pr');
+  if (first && !box.querySelector('.rt-pr.sel')) first.classList.add('sel');
+  box.dataset.loaded = '1';
+}
+async function rtToggle() {
+  const btn = $('rtBtn');
+  if (rtRunning) {
+    btn.disabled = true;
+    await window.rpc.realtimeStop();
+    rtRunning = false;
+    btn.disabled = false;
+    btn.textContent = '▶ 开始变音';
+    rtSetState('未运行', false);
+    rtLog('已停止');
+    return;
+  }
+  const v = (state && state.voices && state.voices[rtSelIdx]) || (state && state.voices && state.voices[0]) || null;
+  if (!v || !v.pth) { toast('请先在「选择声线」里选一个声线包', 4000); return; }
+  const cfg = {
+    mode: 'rvc',
+    pthPath: v.pth,
+    indexPath: v.idx || '',
+    indexRate: parseFloat($('rtRate') ? $('rtRate').value : 0.75),
+    f0upKey: parseInt($('rtPitch') ? $('rtPitch').value : 0, 10),
+    formant: parseFloat($('rtFormant') ? $('rtFormant').value : 0),
+    inputDevice: $('rtIn').value === '' ? null : parseInt($('rtIn').value, 10),
+    outputDevice: $('rtOut').value === '' ? null : parseInt($('rtOut').value, 10),
+    sampleRate: parseInt($('rtSr').value, 10),
+    blockSize: parseInt($('rtBlock').value, 10),
+    gain: parseFloat($('rtGain').value),
+  };
+  btn.disabled = true;
+  rtSetState('启动中…', false);
+  rtLog('正在加载声线模型「' + v.name + '」…首次较慢，请稍候');
+  const r = await window.rpc.realtimeStart(cfg);
+  btn.disabled = false;
+  if (!r || !r.ok) {
+    rtSetState('启动失败', false);
+    rtLog('✗ ' + ((r && r.msg) || '未知错误'));
+    toast('实时变声启动失败：' + ((r && r.msg) || ''), 5000);
+    return;
+  }
+  rtRunning = true;
+  btn.textContent = '■ 停止变音';
+  await window.rpc.saveSettings({
+    rtConfig: {
+      inputDevice: cfg.inputDevice, outputDevice: cfg.outputDevice,
+      sampleRate: cfg.sampleRate, blockSize: cfg.blockSize, gain: cfg.gain,
+      f0upKey: cfg.f0upKey, indexRate: cfg.indexRate, formant: cfg.formant,
+    },
+    rtVoice: v.name,
+  });
+}
+// 关键修复：rtToggle 之前从未绑定到"开始变音"按钮，导致按钮完全没反应
+$('rtBtn').onclick = rtToggle;
+// ── 录音 / 播放录音（只存内存 base64，退出软件即消失）──
+let rtRecData = null, rtRecAudio = null;
+async function rtRecord() {
+  const b = $('rtRecBtn');
+  if (!b) return;
+  const inDev = $('rtIn').value === '' ? null : parseInt($('rtIn').value, 10);
+  const sr = parseInt($('rtSr').value, 10) || 44100;
+  b.disabled = true; b.textContent = '⏺ 录音中…';
+  rtLog('🎤 正在录音 3 秒（输入设备）…');
+  try {
+    const r = await window.rpc.recordInput({ device: inDev, seconds: 3, rate: sr });
+    if (!r || !r.ok) { rtLog('✗ 录音失败: ' + ((r && r.msg) || '未知错误')); return; }
+    rtRecData = r.base64;
+    const pb = $('rtPlayBtn'); if (pb) { pb.disabled = false; pb.style.opacity = '1'; }
+    rtLog('✓ 录音完成（' + (r.seconds || 3) + ' 秒 / ' + (r.rate || sr) + 'Hz），点「🔊 播放录音」试听');
+  } catch (e) { rtLog('✗ 录音失败: ' + (e && e.message)); }
+  finally { b.disabled = false; b.textContent = '🎤 开始录音'; }
+}
+function rtPlayRecord() {
+  if (!rtRecData) { rtLog('还没有录音，先点「🎤 开始录音」'); return; }
+  try {
+    const bin = atob(rtRecData);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    const url = URL.createObjectURL(new Blob([bytes], { type: 'audio/wav' }));
+    if (rtRecAudio) { try { rtRecAudio.pause(); } catch (e) { } }
+    rtRecAudio = new Audio(url);
+    rtRecAudio.onended = () => { URL.revokeObjectURL(url); rtLog('🔊 播放完毕'); };
+    rtRecAudio.play().then(() => rtLog('🔊 正在播放录音…')).catch((e) => rtLog('✗ 播放失败: ' + (e && e.message)));
+  } catch (e) { rtLog('✗ 播放失败: ' + (e && e.message)); }
+}
+$('rtRecBtn').onclick = rtRecord;
+$('rtPlayBtn').onclick = rtPlayRecord;
+window.rpc.onRealtimeStatus((d) => {
+  if (!d || !d.type) return;
+  if (d.type === 'level') {
+    const mi = $('rtMIn'), mo = $('rtMOut');
+    if (mi) mi.style.width = Math.min(100, Math.round(Math.sqrt(d.in || 0) * 130)) + '%';
+    if (mo) mo.style.width = Math.min(100, Math.round(Math.sqrt(d.out || 0) * 130)) + '%';
+    if (d.inferMs) rtLog('推理耗时 ' + d.inferMs + 'ms｜削减波 ' + d.clip + ' 次' + (d.under ? '｜丢块 ' + d.under : ''));
+  } else if (d.type === 'status') {
+    if (d.state === 'running') {
+      rtSetState('运行中 · ' + (d.mode === 'rvc' ? '声线模式' : '音效模式'), true);
+      rtLog('✓ 已启动｜' + (d.device || '') + '｜' + (d.sampleRate || '') + 'Hz｜块 ' + (d.blockFrame || '') + (d.loadSec ? '｜模型加载 ' + d.loadSec + 's' : ''));
+    }
+    else if (d.state === 'loading') { rtSetState('加载模型…', false); rtLog(d.message || '正在加载…'); }
+    else if (d.state === 'starting') { rtSetState('启动中…', false); }
+    else if (d.state === 'preset') { rtSetState('运行中 · ' + (d.preset || ''), true); rtLog('已切换预设：' + (d.preset || '')); }
+    else if (d.state === 'gain') { rtSetState('运行中', true); }
+    else if (d.state === 'stopped') { rtSetState('已停止', false); rtRunning = false; const b = $('rtBtn'); if (b) b.textContent = '▶ 开始实时变声'; }
+    else if (d.state === 'exited') { rtRunning = false; rtSetState('已退出', false); const b = $('rtBtn'); if (b) b.textContent = '▶ 开始实时变声'; }
+  } else if (d.type === 'error') {
+    rtLog('✗ ' + d.msg);
+    toast('实时变声：' + d.msg, 5000);
+  }
+});
+const _rtK = $('rtPitch');
+if (_rtK) {
+  _rtK.addEventListener('change', () => {
+    const v2 = parseInt(_rtK.value, 10) || 0;
+    if (rtRunning) window.rpc.realtimeCmd({ cmd: 'key', value: v2 });
+  });
+}
+const _rtIR = $('rtRate');
+if (_rtIR) {
+  _rtIR.addEventListener('change', () => {
+    const v3 = parseFloat(_rtIR.value);
+    if (rtRunning && !isNaN(v3)) window.rpc.realtimeCmd({ cmd: 'indexRate', value: v3 });
+  });
+}
+const _rtG = $('rtGain');
+if (_rtG) {
+  _rtG.addEventListener('change', () => {
+    const v = parseFloat(_rtG.value);
+    if (rtRunning && !isNaN(v)) window.rpc.realtimeCmd({ cmd: 'gain', value: v });
+  });
+}
+function openPlaza() { window.rpc.openPlaza().then((r) => { if (r && !r.ok) toast(r.msg, 4000); }); }
+window.rpc.onVoicesChanged((d) => {
+  toast('🎭 声线列表已更新：' + ((d && d.name) || ''));
+  refreshState().then(() => renderVoices());
+});
+// 内存优化：主进程通知做 V8 GC（多次，覆盖不同代对象）
+if (window.rpc.onGcNow) {
+  window.rpc.onGcNow(() => {
+    try {
+      if (typeof window.gc === 'function') {
+        window.gc();
+        setTimeout(() => { try { window.gc(); } catch (e) { } }, 200);
+        setTimeout(() => { try { window.gc(); } catch (e) { } }, 500);
+      }
+    } catch (e) { }
+  });
+}
+window.addEventListener('focus', () => {
+  if (window._vFocT) clearTimeout(window._vFocT);
+  window._vFocT = setTimeout(async () => { state = await window.rpc.getState(); renderVoices(); }, 400);
+});
+$('themeBtn').onclick = () => { const cur = state.settings.theme; const next = THEMES[(THEMES.indexOf(cur) + 1) % THEMES.length]; setTheme(next); };
+document.querySelectorAll('.overlay').forEach((o) => o.addEventListener('click', (e) => { if (e.target === o) o.classList.remove('show'); }));
+refreshState();
+
+// ── 系统状态栏（内存 / 处理器 / 硬盘占用率）──
+if (window.rpc && window.rpc.onSysStats) {
+  let lastPaint = 0;
+  window.rpc.onSysStats((d) => {
+    if (!d) return;
+    const isBgMode = document.body.classList.contains('bg-on');
+    const now = Date.now();
+    if (isBgMode && now - lastPaint < 5000) return;
+    lastPaint = now;
+    const paint = (valId, fillId, text, pct, color) => {
+      const v = document.getElementById(valId), f = document.getElementById(fillId);
+      if (v) v.textContent = text;
+      if (f) { f.style.width = Math.max(2, Math.min(100, pct || 0)) + '%'; f.style.background = color; }
+    };
+    const ramPct = d.ramTotal ? (d.ramUsed / d.ramTotal * 100) : 0;
+    paint('stRam', 'sfRam', d.ramUsed.toFixed(2) + 'GB/' + d.ramTotal.toFixed(2) + 'GB', ramPct, ramPct > 85 ? '#e86a8a' : '#6a9ef5');
+    paint('stCpu', 'sfCpu', Math.round(d.cpu) + '%/100%', d.cpu, d.cpu > 85 ? '#e86a8a' : '#8f7bf0');
+    paint('stDisk', 'sfDisk', Math.round(d.disk) + '%/100%', d.disk, d.disk > 85 ? '#e86a8a' : '#35c48e');
+  });
+}
+
+
+// ── 保存的壁纸：纵向列表（点击应用 / 右键删除 / 悬浮出预览与改名）──
+let pvHost = null;
+function hideBgPreview() {
+  if (pvHost) { try { if (pvHost._v) { pvHost._v.pause(); pvHost._v.src = ''; } } catch (e) { } pvHost.remove(); pvHost = null; }
+}
+function showBgPreview(f, anchor) {
+  hideBgPreview();
+  const isVideo = /\.(mp4|webm)$/i.test(f.name);
+  pvHost = document.createElement('div');
+  pvHost.style.cssText = 'position:fixed;z-index:999;width:262px;background:#10182e;border:1px solid #2a3a66;border-radius:10px;padding:8px;box-shadow:0 8px 24px rgba(0,0,0,.45)';
+  const ttl = document.createElement('div');
+  ttl.textContent = '壁纸预览';
+  ttl.style.cssText = 'font-size:11px;color:#7fd7ff;margin-bottom:6px;text-align:center';
+  pvHost.appendChild(ttl);
+  const url = 'rvc://bg/' + encodeURIComponent(f.name);
+  if (!isVideo) {
+    const im = document.createElement('img');
+    im.src = url + '?v=' + Date.now();
+    im.style.cssText = 'width:100%;height:150px;object-fit:contain;border-radius:6px;display:block;background:#060a16';
+    pvHost.appendChild(im);
+  } else {
+    const v = document.createElement('video');
+    v.muted = true; v.loop = true; v.autoplay = true; v.playsInline = true;
+    v.src = url + '?v=' + Date.now();
+    v.style.cssText = 'width:100%;height:150px;object-fit:contain;border-radius:6px;display:block;background:#060a16';
+    v.addEventListener('timeupdate', () => { if (v.currentTime > 5) { try { v.currentTime = 0; } catch (e) { } } });
+    pvHost._v = v;
+    pvHost.appendChild(v);
+    setTimeout(() => { v.play().catch(() => { }); }, 30);
+  }
+  const nm = document.createElement('div');
+  nm.textContent = f.name;
+      nm.title = f.name;
+  nm.style.cssText = 'font-size:11px;color:#9fb0d8;margin-top:6px;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
+  pvHost.appendChild(nm);
+  document.body.appendChild(pvHost);
+  const r = anchor.getBoundingClientRect();
+  pvHost.style.left = Math.max(10, Math.min(r.left - 278, innerWidth - 278)) + 'px';
+  pvHost.style.top = Math.max(10, Math.min(r.top, innerHeight - 240)) + 'px';
+}
+async function fillSavedBg() {
+  const host = $('savedBgList');
+  if (!host) return;
+  const head = $('bgDropHead');
+  if (host && !host._sw) { host._sw = true; host.addEventListener('click', (e) => e.stopPropagation()); }
+  if (head) {
+    head.onclick = (e) => {
+      e.stopPropagation();
+      const open = host.classList.toggle('open');
+      const ar = $('bgDropArrow');
+      if (open) {
+        host.style.display = 'flex';
+        try {
+          const hr = head.getBoundingClientRect();
+          host.style.left = Math.max(10, Math.min(hr.left, innerWidth - 292)) + 'px';
+          host.style.top = (hr.bottom + 6) + 'px';
+        } catch (e) { host.style.left = '20px'; host.style.top = '120px'; }
+        host.style.maxHeight = '0px';
+        fillSavedBg();
+        setTimeout(() => {
+          const prev = host.style.maxHeight;
+          host.style.maxHeight = 'none';
+          const real = host.offsetHeight;
+          host.style.maxHeight = prev;
+          void host.offsetHeight;
+          host.style.maxHeight = Math.min(520, real) + 'px';
+        }, 30);
+      } else {
+        host.style.maxHeight = '0px';
+      }
+      if (ar) ar.style.transform = open ? 'rotate(180deg)' : '';
+    };
+    if (!host._te) {
+      host._te = true;
+      host.addEventListener('transitionend', (ev) => {
+        if (ev.propertyName === 'max-height' && !host.classList.contains('open')) host.style.display = 'none';
+      });
+    }
+  }
+  try {
+    const list = await window.rpc.listBg();
+    const cnt = $('bgDropCount');
+    if (cnt) cnt.textContent = '（' + list.length + ' 个）';
+    host.innerHTML = '';
+    if (!list.length) {
+      host.innerHTML += '<span style="color:#aab;font-size:12px">（还没有保存的壁纸）</span>';
+      return;
+    }
+    for (const f of list) {
+      const cur = state.settings && state.settings.bgFile === f.name;
+      const row = document.createElement('div');
+      row.title = f.name;
+      row.style.cssText = 'display:flex;align-items:center;gap:6px;border:1px solid ' + (cur ? 'var(--ac)' : '#e3e9f7') + ';border-radius:9px;padding:7px 10px;background:' + (cur ? 'color-mix(in srgb, var(--ac) 8%, #fff)' : '#fff') + ';cursor:pointer;flex-wrap:nowrap;overflow:hidden';
+      const nm = document.createElement('div');
+      nm.style.cssText = 'flex:0 1 auto;min-width:0;max-width:120px;font-size:11.5px;color:#556;white-space:nowrap;overflow:hidden;text-overflow:ellipsis';
+      nm.textContent = (/\.(mp4|webm)$/i.test(f.name) ? '🎬 ' : '🖼️ ') + f.name;
+      row.appendChild(nm);
+      const btnPv = document.createElement('button');
+      btnPv.className = 'sbtn';
+      btnPv.textContent = '预览';
+      btnPv.style.cssText = 'padding:4px 11px;font-size:11px;opacity:0;transition:opacity .06s;white-space:nowrap;flex-shrink:0';
+      const pen = document.createElement('span');
+      pen.textContent = '✏️';
+      pen.style.cssText = 'font-size:12px;opacity:0;transition:opacity .06s;cursor:pointer;flex-shrink:0';
+      const vol = document.createElement('span');
+      vol.textContent = '🔊';
+      vol.title = '调整壁纸声音';
+      vol.style.cssText = 'font-size:12px;opacity:0;transition:opacity .06s;cursor:pointer;flex-shrink:0';
+      const sp = document.createElement('div');
+      sp.style.cssText = 'flex:0 0 2px';
+      row.appendChild(btnPv);
+      row.appendChild(pen);
+      row.appendChild(vol);
+      row.appendChild(sp);
+      let t1 = null;
+      row.addEventListener('mouseenter', () => {
+        t1 = setTimeout(() => { btnPv.style.opacity = '1'; pen.style.opacity = '1'; vol.style.opacity = '1'; }, 50);
+      });
+      row.addEventListener('mouseleave', () => {
+        clearTimeout(t1);
+        btnPv.style.opacity = '0'; pen.style.opacity = '0'; vol.style.opacity = '0';
+        hideBgPreview();
+      });
+      btnPv.onclick = (e) => { e.stopPropagation(); showBgPreview(f, row); };
+      pen.onclick = (e) => { e.stopPropagation(); renameSavedBg(f.name); };
+      vol.onclick = (e) => { e.stopPropagation(); showVolumePop(row); };
+      row.onclick = () => useSavedBg(f.name);
+      row.addEventListener('contextmenu', (e) => { e.preventDefault(); deleteSavedBg(f.name); });
+      host.appendChild(row);
+    }
+  } catch (e) { }
+}
+async function useSavedBg(name) {
+  try {
+    state.settings.bgFile = name;
+    state.settings.bgMode = /\.(mp4|webm)$/i.test(name) ? 'video' : 'image';
+    await window.rpc.saveSettings({ bgFile: name, bgMode: state.settings.bgMode });
+    state = await window.rpc.getState();
+    applySettings();
+    fillSavedBg();
+    toast('已切换壁纸：' + name);
+  } catch (e) { toast('切换失败：' + e.message, 4000); }
+}
+async function deleteSavedBg(name) {
+  if (!confirm('删除这个保存的壁纸？\n' + name)) return;
+  if (state.settings && state.settings.bgFile === name) {
+    await window.rpc.saveSettings({ bgMode: 'white', bgFile: '' });
+    state = await window.rpc.getState();
+    applySettings();
+    await new Promise((r) => setTimeout(r, 400));
+  }
+  const r = await window.rpc.deleteBg(name);
+  if (r.ok) { state = await window.rpc.getState(); applySettings(); fillSavedBg(); toast('已删除'); }
+  else toast('删除失败：' + r.msg, 4000);
+}
+const VOICE_DICT = {
+  'hoshino': '小鸟游星野', 'shiroko': '砂狼白子', 'arona': '阿罗娜', 'aris': '爱丽丝', 'alice': '爱丽丝',
+  'ayane': '小绿', 'momoi': '桃井', 'kei': '凯伊', 'yuuka': '优香', 'nonomi': '野宫', 'serika': '黑见芹香',
+  'ayaka': '神里绫华', 'raiden': '雷电将军', 'nahida': '纳西妲', 'furina': '芙宁娜', 'zhongli': '钟离',
+  'ganyu': '甘雨', 'hutao': '胡桃', 'keqing': '刻晴', 'venti': '温迪', 'paimon': '派蒙', 'kafka': '卡芙卡',
+  'anon': '千早爱音', 'rana': '要乐奈', 'soyo': '长崎爽世', 'taki': '椎名立希', 'tomori': '高松灯',
+  'sakiko': '丰川祥子', 'mutsumi': '若叶睦', 'guanguan': '关关', 'keruan': '可然', 'kiki': '琪琪',
+  'hina': '日奈', 'wakamo': '若藻', 'mika': '弥香', 'mashiro': '真白', 'asuna': '明日奈', 'hasumi': '莲见',
+  'chise': '知世', 'koharu': '小春', 'tsubaki': '椿', 'shizuko': '静子', 'saori': '纱织', 'atsuko': '敦子',
+  'hifumi': '日富美', 'azusa': '梓', 'mari': '玛丽', 'toki': '时', 'himari': '上原绯玛丽', 'eimi': '咏美',
+  'kaho': '花帆', 'noa': '诺亚', 'rio': '里奥', 'ui': '结', 'utaha': '诗惠', 'yuzu': '柚子',
+  'miku': '初音未来', 'atri': '亚托莉', 'nanami': '七海', 'luka': '卢卡', 'silverwolf': '银狼',
+  'shark': '鲨鱼娘', 'chika': '千花', 'yor': '约尔', 'mashu': '玛修', 'saber': 'Saber'
+};
+function translateName(name) {
+  const orig = String(name || '');
+  const s = orig.toLowerCase().replace(/_/g, ' ').replace(/[-+.]/g, ' ');
+  let result = '';
+  for (const k of Object.keys(VOICE_DICT)) { if (s.indexOf(k) >= 0) { result = VOICE_DICT[k]; break; } }
+  if (!result) {
+    const kana = [['ほしの','星野'],['しろこ','白子'],['アロナ','阿罗娜'],['アリス','爱丽丝'],['ケイ','凯伊'],
+      ['ヒナ','日奈'],['ユウカ','优香'],['アル','阿露'],['ミカ','弥香'],['アコ','亚子'],['アヤネ','小绿'],
+      ['モモイ','桃井'],['ノノミ','野宫'],['セリカ','黑见芹香'],['ホシノ','星野'],['シロコ','白子'],['アズサ','梓'],
+      ['ヒフミ','日富美'],['マリ','玛丽'],['トキ','时'],['ミドリ','小绿'],['ユズ','柚子'],['マキ','真纪'],
+      ['カヨコ','佳代子'],['ハルナ','春奈'],['ハスミ','莲见'],['ツバキ','椿'],['シズコ','静子'],['マシロ','真白']];
+    for (const [k, v] of kana) { if (orig.indexOf(k) >= 0) { result = v; break; } }
+  }
+  if (!result) return '';
+  // 保留语言后缀（-JP / -CN / -日配 等），否则日配判定会丢失 → 无配置警告
+  const suf = orig.match(/(?:^|[\s\-_.(（])(jpa?n?|jp|ja|日配|日语|chinese|cn|english|en)(?=[\s\-_.)）]|$)/i);
+  if (suf) {
+    const tag = String(suf[1]).toLowerCase();
+    let label = '';
+    if (/日配|日语/.test(tag)) label = '-日配';
+    else if (tag === 'jp' || tag === 'ja' || tag.indexOf('jp') === 0) label = '-JP';
+    else if (tag === 'cn' || tag === 'chinese') label = '-中文';
+    else if (tag === 'en' || tag === 'english') label = '-EN';
+    if (label && !result.endsWith(label)) result += label;
+  }
+  return result;
+}
+function cropVoiceCover(name, dataUrl) {
+  const ov = document.createElement('div');
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(20,22,40,.7);z-index:1000;display:flex;align-items:center;justify-content:center';
+  const box = document.createElement('div');
+  box.style.cssText = 'background:#fff;border-radius:14px;padding:16px 18px;box-shadow:0 12px 40px rgba(40,50,100,.35)';
+  const STAGE = 480;
+  box.innerHTML = '<div style="font-size:14px;font-weight:600;color:#445;margin-bottom:10px">✂️ 裁剪头像（' + name + '）<span style="font-size:11px;color:#99a;font-weight:400">拖动四边/四角调整，按住图片可移动，滚轮缩放</span></div>' +
+    '<div id="cropStage" style="position:relative;width:' + STAGE + 'px;height:' + STAGE + 'px;overflow:hidden;background:#eef0f8;border-radius:10px;user-select:none"></div>' +
+    '<div style="display:flex;gap:10px;justify-content:flex-end;margin-top:12px">' +
+    '<button id="cropCancel" style="padding:7px 18px;border:1px solid #dfe3f2;border-radius:9px;background:#fff;color:#556;cursor:pointer;font-size:13px">取消</button>' +
+    '<button id="cropOk" style="padding:7px 18px;border:none;border-radius:9px;background:linear-gradient(90deg,var(--h1),var(--h2));color:#fff;cursor:pointer;font-size:13px">确定</button></div>';
+  ov.appendChild(box);
+  document.body.appendChild(ov);
+  const stage = box.querySelector('#cropStage');
+  const img = new Image();
+  img.onload = () => {
+    const iw = img.naturalWidth, ih = img.naturalHeight;
+    const dispH0 = STAGE, dispW0 = iw * STAGE / ih;
+    img.style.cssText = 'position:absolute;left:' + ((STAGE - dispW0) / 2) + 'px;top:0;height:' + dispH0 + 'px;width:' + dispW0 + 'px;pointer-events:none';
+    stage.appendChild(img);
+    const fw = 252, fh = 448;
+    const frame = document.createElement('div');
+    frame.style.cssText = 'position:absolute;left:' + ((STAGE - fw) / 2) + 'px;top:' + ((STAGE - fh) / 2) + 'px;width:' + fw + 'px;height:' + fh + 'px;border:2px solid #fff;box-shadow:0 0 0 9999px rgba(15,18,38,.55);box-sizing:border-box;z-index:2';
+    stage.appendChild(frame);
+    const mkHandle = (css, dir) => {
+      const el = document.createElement('div');
+      el.dataset.dir = dir;
+      el.style.cssText = css + ';position:absolute;z-index:3;background:#fff;border:1px solid #c9d0ea;border-radius:3px';
+      frame.appendChild(el);
+      return el;
+    };
+    mkHandle('left:50%;top:-5px;width:26px;height:6px;transform:translateX(-50%);cursor:ns-resize', 'n');
+    mkHandle('left:50%;bottom:-5px;width:26px;height:6px;transform:translateX(-50%);cursor:ns-resize', 's');
+    mkHandle('left:-5px;top:50%;width:6px;height:26px;transform:translateY(-50%);cursor:ew-resize', 'w');
+    mkHandle('right:-5px;top:50%;width:6px;height:26px;transform:translateY(-50%);cursor:ew-resize', 'e');
+    mkHandle('left:-5px;top:-5px;width:10px;height:10px;cursor:nwse-resize', 'nw');
+    mkHandle('right:-5px;top:-5px;width:10px;height:10px;cursor:nesw-resize', 'ne');
+    mkHandle('left:-5px;bottom:-5px;width:10px;height:10px;cursor:nesw-resize', 'sw');
+    mkHandle('right:-5px;bottom:-5px;width:10px;height:10px;cursor:nwse-resize', 'se');
+    const pic = { x: parseFloat(img.style.left), y: 0, dragging: false, sx: 0, sy: 0, scale: 1 };
+    const applyPic = () => { img.style.left = pic.x + 'px'; img.style.top = pic.y + 'px'; img.style.height = (dispH0 * pic.scale) + 'px'; img.style.width = (dispW0 * pic.scale) + 'px'; };
+    stage.addEventListener('mousedown', (ev) => {
+      if (ev.target !== stage && ev.target !== img) return;
+      pic.dragging = true; pic.sx = ev.clientX - pic.x; pic.sy = ev.clientY - pic.y;
+    });
+    window.addEventListener('mousemove', (ev) => { if (!pic.dragging) return; pic.x = ev.clientX - pic.sx; pic.y = ev.clientY - pic.sy; applyPic(); });
+    window.addEventListener('mouseup', () => { pic.dragging = false; });
+    stage.addEventListener('wheel', (ev) => {
+      ev.preventDefault();
+      pic.scale = Math.min(4, Math.max(0.5, pic.scale * (ev.deltaY < 0 ? 1.08 : 0.92)));
+      applyPic();
+    }, { passive: false });
+    frame.querySelectorAll('div').forEach((hd) => {
+      hd.addEventListener('mousedown', (ev) => {
+        ev.stopPropagation();
+        const dir = hd.dataset.dir;
+        const st = { mx: ev.clientX, my: ev.clientY, l: frame.offsetLeft, t: frame.offsetTop, w: frame.offsetWidth, hgt: frame.offsetHeight };
+        const move = (e2) => {
+          const dx = e2.clientX - st.mx, dy = e2.clientY - st.my;
+          let l = st.l, t = st.t, w = st.w, hgt = st.hgt;
+          if (dir.indexOf('e') >= 0) w = st.w + dx;
+          if (dir.indexOf('s') >= 0) hgt = st.hgt + dy;
+          if (dir.indexOf('w') >= 0) { l = st.l + dx; w = st.w - dx; }
+          if (dir.indexOf('n') >= 0) { t = st.t + dy; hgt = st.hgt - dy; }
+          w = Math.max(40, w); hgt = Math.max(40, hgt);
+          if (l < 0) { w += l; l = 0; }
+          if (t < 0) { hgt += t; t = 0; }
+          if (l + w > STAGE) w = STAGE - l;
+          if (t + hgt > STAGE) hgt = STAGE - t;
+          frame.style.left = l + 'px'; frame.style.top = t + 'px';
+          frame.style.width = w + 'px'; frame.style.height = hgt + 'px';
+        };
+        const up = () => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up); };
+        window.addEventListener('mousemove', move);
+        window.addEventListener('mouseup', up);
+      });
+    });
+    box.querySelector('#cropCancel').onclick = () => ov.remove();
+    box.querySelector('#cropOk').onclick = async () => {
+      const ratio = iw / (dispW0 * pic.scale);
+      const sx = (frame.offsetLeft - pic.x) * ratio;
+      const sy = (frame.offsetTop - pic.y) * ratio;
+      const cw = frame.offsetWidth * ratio, ch = frame.offsetHeight * ratio;
+      const cv = document.createElement('canvas');
+      const MAXS = 960;
+      const sc2 = Math.min(1, MAXS / Math.max(cw, ch));
+      cv.width = Math.max(2, Math.round(cw * sc2)); cv.height = Math.max(2, Math.round(ch * sc2));
+      const ctx = cv.getContext('2d');
+      ctx.drawImage(img, sx, sy, cw, ch, 0, 0, cv.width, cv.height);
+      const out = cv.toDataURL('image/png');
+      const r = await window.rpc.saveVoiceCover({ name: name, dataUrl: out });
+      if (r && r.ok) {
+        toast('✅ 头像已更新');
+        ov.remove();
+        state = await window.rpc.getState();
+        renderVoices();
+  // 恢复上次选择的界面（录音 / 实时）
+  try {
+    const rt = state.settings && state.settings.rtMode === 'realtime';
+    document.body.classList.toggle('rt-on', !!rt); moveSysPanel(!!rt);
+    rtSwitchLabel();
+    if (rt) {
+      const rc = (state.settings && state.settings.rtConfig) || {};
+      if (rc.sampleRate) $('rtSr').value = String(rc.sampleRate);
+      if (rc.blockSize) $('rtBlock').value = String(rc.blockSize);
+      if (rc.gain) { $('rtGain').value = String(rc.gain); }
+      rtPresetId = (state.settings && state.settings.rtPreset) || '';
+      rtRenderVoices();
+      if (rc.f0upKey != null && $('rtPitch')) { $('rtPitch').value = String(rc.f0upKey); }
+      if (rc.indexRate != null && $('rtRate')) { $('rtRate').value = String(rc.indexRate); }
+      if (rc.formant != null && $('rtFormant')) { $('rtFormant').value = String(rc.formant); }
+      const wantName = (state.settings && state.settings.rtVoice) || '';
+      if (wantName && state.voices) {
+        const vi = state.voices.findIndex((x) => x.name === wantName);
+        if (vi >= 0) rtSelIdx = vi;
+      }
+      rtLoadDevices().then(() => {
+        if (rc.inputDevice != null && $('rtIn')) $('rtIn').value = String(rc.inputDevice);
+        if (rc.outputDevice != null && $('rtOut')) $('rtOut').value = String(rc.outputDevice);
+      });
+    }
+  } catch (e) { }
+      } else toast('✗ ' + ((r && r.msg) || '保存失败'), 4000);
+    };
+  };
+  img.src = dataUrl;
+}
+function askText(title, defVal, cb, hintText, translator) {
+  const ov = document.createElement('div');
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(20,22,40,.5);z-index:1000;display:flex;align-items:center;justify-content:center';
+  const box = document.createElement('div');
+  box.style.cssText = 'background:#fff;border-radius:14px;padding:18px 20px;min-width:330px;box-shadow:0 12px 40px rgba(40,50,100,.3)';
+  box.innerHTML = '<div style="font-size:14px;font-weight:600;color:#445;margin-bottom:10px">' + title + '</div>' +
+    '<input id="askTextInput" style="width:100%;box-sizing:border-box;padding:9px 10px;border:1px solid #dfe3f2;border-radius:9px;font-size:13px">' +
+    (hintText === '' ? '' : '<div style="font-size:11px;color:#aab;margin-top:6px">' + (hintText || '扩展名不能改（如 .mp4 / .jpg）') + '</div>') +
+    (translator ? '<button id="askTextTr" style="margin-top:8px;padding:5px 12px;border:1px solid #dfe3f2;border-radius:8px;background:#f6f8ff;color:#556;cursor:pointer;font-size:12px">🤖 译为中文</button>' : '') +
+    '<div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px"><button class="sbtn" id="askCancel">取消</button><button class="sbtn primary" id="askOk">确定</button></div>';
+  ov.appendChild(box);
+  document.body.appendChild(ov);
+  const inp = box.querySelector('#askTextInput');
+  const trBtn = box.querySelector('#askTextTr');
+  if (trBtn && inp) trBtn.onclick = () => {
+    const t = translator(inp.value);
+    if (t) inp.value = t;
+    else toast('没有匹配到中文名，可以手动输入', 3000);
+  };
+  inp.value = defVal || '';
+  setTimeout(() => { inp.focus(); inp.select(); }, 30);
+  const close = () => ov.remove();
+  box.querySelector('#askCancel').onclick = close;
+  box.querySelector('#askOk').onclick = () => { const v = inp.value.trim(); close(); cb(v); };
+  inp.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') { const v = inp.value.trim(); close(); cb(v); }
+    if (e.key === 'Escape') close();
+  });
+  ov.addEventListener('click', (e) => { if (e.target === ov) close(); });
+}
+async function renameSavedBg(oldName) {
+  askText('重命名壁纸：' + oldName, oldName, async (nn) => {
+    if (!nn || nn === oldName) return;
+    const r = await window.rpc.renameBg(oldName, nn);
+    if (r.ok) { state = await window.rpc.getState(); applySettings(); fillSavedBg(); toast('已重命名为 ' + nn); }
+    else toast('重命名失败：' + r.msg, 4500);
+  });
+}
+
+// ── 壁纸音量悬浮窗 ──
+let volHost = null;
+function hideVolPop() { if (volHost) { volHost.remove(); volHost = null; } }
+function setBgVolume(v) {
+  try {
+    state.settings.bgVolume = v;
+    window.rpc.saveSettings({ bgVolume: v }).catch(() => { });
+    const bv = $('bgVideo');
+    if (bv) { try { bv.volume = v; } catch (e) { } }
+  } catch (e) { }
+}
+function showVolumePop(anchor) {
+  hideVolPop();
+  const cur = Math.round(((state.settings && state.settings.bgVolume != null) ? state.settings.bgVolume : 0.5) * 100);
+  volHost = document.createElement('div');
+  volHost.style.cssText = 'position:fixed;z-index:1001;background:#fff;border:1px solid #dfe3f2;border-radius:10px;padding:12px 14px;box-shadow:0 8px 24px rgba(40,50,100,.25);width:230px';
+  volHost.innerHTML =
+    '<div style="font-size:13px;font-weight:600;color:#445;margin-bottom:10px">声音调整</div>' +
+    '<input type="range" min="0" max="100" value="' + cur + '" id="volRange" style="width:100%">' +
+    '<div style="display:flex;justify-content:flex-end;margin-top:4px"><span id="volVal" style="font-size:11px;color:#889">' + cur + '%</span></div>';
+  document.body.appendChild(volHost);
+  const r = anchor.getBoundingClientRect();
+  volHost.style.left = Math.max(10, Math.min(r.left - 130, innerWidth - 250)) + 'px';
+  volHost.style.top = Math.max(10, r.top - 20) + 'px';
+  const rg = volHost.querySelector('#volRange');
+  rg.oninput = () => {
+    const v = parseInt(rg.value, 10);
+    volHost.querySelector('#volVal').textContent = v + '%';
+    setBgVolume(v / 100);
+  };
+  volHost.addEventListener('click', (e) => e.stopPropagation());
+}
+document.addEventListener('click', () => {
+  if (volHost) hideVolPop();
+  const l = $('savedBgList');
+  if (l && l.classList.contains('open')) {
+    l.classList.remove('open');
+    l.style.maxHeight = '0px';
+    const ar = $('bgDropArrow');
+    if (ar) ar.style.transform = '';
+    setTimeout(() => { if (!l.classList.contains('open')) l.style.display = 'none'; }, 320);
+  }
+});
+
+// ── 更多面板（百宝箱）──
+const morePanel = $('morePanel');
+function openMore() {
+  morePanel.style.display = 'block';
+  requestAnimationFrame(() => requestAnimationFrame(() => morePanel.classList.add('show')));
+}
+function closeMore() {
+  morePanel.classList.remove('show');
+  setTimeout(() => { if (!morePanel.classList.contains('show')) morePanel.style.display = 'none'; }, 280);
+}
+$('moreBtn').onclick = (e) => { e.stopPropagation(); morePanel.classList.contains('show') ? closeMore() : openMore(); };
+$('moreClose').onclick = closeMore;
+document.addEventListener('click', (e) => {
+  if (morePanel.classList.contains('show') && !morePanel.contains(e.target) && e.target.id !== 'moreBtn') closeMore();
+});
+
+const moreTitles = { tool: '工具箱', feed: '反馈', diag: '软件诊断', log: '日志记录', game: '小游戏', author: '原作者' };
+const morePanes = { tool: 'paneTool', feed: 'paneFeed', diag: 'paneDiag', log: 'paneLog', game: 'paneGame', author: 'paneAuthor' };
+const moreTabs = Array.prototype.slice.call(document.querySelectorAll('#morePanel .mitem'));
+function showMore(key) {
+  moreTabs.forEach((t) => t.classList.toggle('act', t.dataset.m === key));
+  Object.keys(morePanes).forEach((k) => {
+    const el = $(morePanes[k]);
+    if (!el) return;
+    el.classList.remove('pane-anim');
+    el.style.display = (k === key ? 'block' : 'none');
+    if (k === key) { void el.offsetWidth; el.classList.add('pane-anim'); }
+  });
+  const tt = $('moreTitle');
+  if (tt) tt.textContent = moreTitles[key] || '';
+  if (key === 'diag') renderRepair(true);
+}
+moreTabs.forEach((t) => { t.onclick = () => showMore(t.dataset.m); });
+showMore('tool');
+
+// 功能按钮：松开时闪一下
+document.addEventListener('pointerup', (e) => {
+  const b = e.target && e.target.closest ? e.target.closest('.fbtn') : null;
+  if (!b) return;
+  b.classList.remove('spark');
+  void b.offsetWidth;
+  b.classList.add('spark');
+  setTimeout(() => b.classList.remove('spark'), 340);
+});
+
+if (window.rpc.onGcNow) window.rpc.onGcNow(() => { try { window.gc && window.gc(); } catch (e) { } });
+if (window.rpc.onSysStats) {
+  window.rpc.onSysStats((d) => {
+    if (!d) return;
+    $('memFree').textContent = (d.ramTotal - d.ramUsed).toFixed(2) + 'GB';
+    $('memTotal').textContent = d.ramTotal.toFixed(2) + 'GB';
+  });
+}
+
+// 内存优化
+if (window.rpc.optimizeMemory) {
+  $('memBtn').onclick = async () => {
+    const b = $('memBtn'); const old = b.textContent;
+    b.disabled = true; b.textContent = '优化中…';
+    $('memTip').textContent = '正在清理工作集、待机列表与文件缓存…';
+    try {
+      const r = await window.rpc.optimizeMemory();
+      let tip = r.freedMB > 0 ? ('已回收约 ' + r.freedMB + ' MB') : (r.wsOk ? ('已压缩 ' + r.wsOk + ' 个进程的工作集') : '内存本来就比较干净');
+      if (r.freedMB <= 0) tip += '　【原始输出：' + String(r.cleaned || '').slice(0, 100) + '】';
+      if (r.priv === true) tip += '　·　待机列表已清理';
+      else if (r.priv === false) tip += '　·　待机列表未清理，需以【管理员身份】运行（rc=' + r.rc + '）';
+      if (r.fcache === true) tip += '　·　系统文件缓存已清理';
+      else if (r.quota === false) tip += '　·　文件缓存未清理（需管理员）';
+      $('memTip').textContent = tip;
+      toast(tip, 4000);
+    } catch (e) { toast('优化失败：' + (e && e.message), 4000); }
+    b.disabled = false; b.textContent = old;
+  };
+}
+
+// 清理垃圾
+if ($('cleanBtn')) $('cleanBtn').onclick = async () => {
+  if (!confirm('将清空 Audio-PA 里的所有音频与转换历史记录，确定继续？')) return;
+  try {
+    const r = await window.rpc.clearInput();
+    if (typeof clearHist === 'function') { try { clearHist(); } catch (e) { } }
+    files = []; renderFiles();
+    toast(r && r.ok ? '已清理输入音频与转换记录' : '清理失败：' + ((r && r.msg) || ''), 3500);
+  } catch (e) { toast('清理失败：' + (e && e.message), 4000); }
+};
+
+// 千万别点!
+if ($('prankBtn')) $('prankBtn').onclick = () => {
+  const fx = [
+    ['界面旋转', 'transform:rotate(180deg)', 1600],
+    ['上下颠倒', 'transform:scaleY(-1)', 1400],
+    ['时空扭曲', 'transform:skewX(-12deg) scale(.96)', 1300],
+    ['隐身术', 'opacity:.08', 1200],
+    ['左右横跳', 'transform:translateX(40px)', 900],
+  ];
+  const pick = fx[Math.random() * fx.length | 0];
+  const app = document.getElementById('app');
+  const prank = document.getElementById('prankLayer');
+  if (prank) prank.textContent = '你居然真的点了……【' + pick[0] + '】';
+  if (app) { app.style.transition = 'transform .35s, opacity .35s'; app.style[pick[1].split(':')[0]] = pick[1].split(':')[1]; }
+  toast('说了别点嘛（' + pick[0] + '）', 2200);
+  setTimeout(() => {
+    if (app) { app.style.transform = ''; app.style.opacity = ''; }
+    if (prank) prank.textContent = '';
+  }, pick[2]);
+};
+
+// 多线程下载
+if (window.rpc.mtDownload) {
+  // 下载保存路径：默认「下载」目录，选择后记住
+  (async () => {
+    try {
+      const saved = localStorage.getItem('rvc_dl_path');
+      if (saved) { $('dlPath').value = saved; return; }
+      const dd = await window.rpc.getDownloadsDir();
+      if (dd) $('dlPath').value = dd;
+    } catch (e) { }
+  })();
+  $('dlPick').onclick = async () => {
+    let defP = 'download.bin';
+    try { const dd0 = await window.rpc.getDownloadsDir(); if (dd0) defP = dd0 + '\\download.bin'; } catch (e) { }
+    const dir = await window.rpc.pickSavePath(defP);
+    if (!dir) return;
+    try {
+      const idx = Math.max(dir.lastIndexOf('\\'), dir.lastIndexOf('/'));
+      $('dlPath').value = idx > 0 ? dir.slice(0, idx) : dir;
+      const base = idx > 0 ? dir.slice(idx + 1) : '';
+      if (base && !/^download\.bin$/i.test(base) && !$('dlName').value) $('dlName').value = base;
+    } catch (e) { $('dlPath').value = dir; }
+    try { localStorage.setItem('rvc_dl_path', $('dlPath').value); } catch (e2) { }
+  };
+  $('dlGo').onclick = async () => {
+    const url = $('dlUrl').value.trim();
+    let dir = $('dlPath').value.trim();
+    const name = $('dlName').value.trim();
+    if (!url) { toast('请先填写下载地址'); return; }
+    if (!dir) { toast('请先选择保存路径'); return; }
+    if (!/[/\\]$/.test(dir)) dir += '\\';
+    const savePath = dir + (name || (url.split('?')[0].split('/').pop() || 'download.bin'));
+    $('dlBarWrap').style.display = 'block';
+    $('dlBar').style.width = '0%';
+    $('dlInfo').textContent = '连接中…';
+    const b = $('dlGo'); b.disabled = true; b.textContent = '下载中…';
+    const r = await window.rpc.mtDownload({ url, savePath, threads: parseInt($('dlThreads').value, 10) || 8 });
+    b.disabled = false; b.textContent = '开始下载';
+    if (r.ok) {
+      $('dlBar').style.width = '100%';
+      $('dlInfo').textContent = '完成：' + r.path + '（' + (r.mode || (r.threads + ' 线程')) + '）';
+      toast('下载完成：' + (r.size / 1048576).toFixed(1) + ' MB');
+    } else { $('dlInfo').textContent = r.msg; toast(r.msg, 5000); }
+    setTimeout(() => { $('dlBarWrap').style.display = 'none'; }, 4000);
+  };
+  $('dlCancel').onclick = async () => {
+    await window.rpc.cancelDownload();
+    $('dlInfo').textContent = '已取消';
+    $('dlGo').disabled = false; $('dlGo').textContent = '开始下载';
+    setTimeout(() => { $('dlBarWrap').style.display = 'none'; }, 1500);
+  };
+  let dlLastDone = 0, dlLastT = 0;
+  window.rpc.onDownloadProgress((d) => {
+    if (!d || !d.total) return;
+    const pct = Math.min(100, d.done / d.total * 100);
+    $('dlBar').style.width = pct.toFixed(1) + '%';
+    const now = performance.now();
+    let spd = '…';
+    if (dlLastT && now > dlLastT) {
+      spd = ((d.done - dlLastDone) / 1048576 / ((now - dlLastT) / 1000)).toFixed(1) + ' MB/s';
+    }
+    dlLastDone = d.done; dlLastT = now;
+    $('dlInfo').textContent = pct.toFixed(1) + '%　' + (d.done / 1048576).toFixed(1) + ' / ' + (d.total / 1048576).toFixed(1) + ' MB　' + spd + '　活跃 ' + d.parts.filter((x) => x > 0).length + ' 块';
+  });
+}
+
+// 软件诊断
+let lastDiagText = '';
+function diagLine(lv, tx) { return '<div class="dline d' + lv + '">' + tx + '</div>'; }
+async function runDiagnose() {
+  const out = $('diagOut');
+  if (!out) return;
+  out.innerHTML = diagLine('info', '正在体检…');
+  const rows = [];
+  const add = (lv, tx) => rows.push({ lv, tx });
+  const root = String(state.inputDir || '').replace(/[\\/]Audio-PA[\\/]?$/i, '');
+  const dirs = [['输入目录 Audio-PA', state.inputDir], ['输出目录 Audio-RL', state.outputDir], ['声线目录 Voice-LP', root + '\\Voice-LP']];
+  let checks = [];
+  try { checks = await window.rpc.checkPaths(dirs.map((d) => d[1])); } catch (e) { }
+  dirs.forEach((d, i) => {
+    const okk = !!(checks[i] && checks[i].exists);
+    add(okk ? 'ok' : 'err', (okk ? '[正常] ' : '[缺失] ') + d[0] + '：' + d[1]);
+  });
+  const vs = state.voices || [];
+  if (!vs.length) add('err', '没检测到声线包，放进 Voice-LP 后点刷新');
+  else {
+    add('ok', '检测到 ' + vs.length + ' 个声线包');
+    for (const v of vs.slice(0, 30)) {
+      const okm = /\.(pth|onnx)$/i.test(v.path || '');
+      add(okm ? 'ok' : 'warn', '　· ' + v.name + '：' + (okm ? (v.path || '') : '[警告] 缺模型文件'));
+    }
+  }
+  const engDir = root + '\\Engine';
+  let engFiles = [];
+  try { engFiles = await window.rpc.listDir(engDir); } catch (e) { }
+  if (!engFiles.length) add('err', '引擎目录不存在或为空：' + engDir);
+  else {
+    add('info', '引擎目录：' + engDir + '（' + engFiles.length + ' 项）');
+    for (const n of ['python', 'infer', 'assets', 'ffmpeg']) {
+      const hit = engFiles.some((f) => String(f).toLowerCase().indexOf(n.toLowerCase()) === 0);
+      add(hit ? 'ok' : 'warn', (hit ? '[正常] ' : '[警告] ') + '引擎关键项 ' + n);
+    }
+  }
+  const logTxt = ($('log') && $('log').textContent) || '';
+  const rules = [
+    { re: /No such file|找不到|cannot find|does not exist/i, lv: 'err', tip: '缺少文件，按报错里的路径补齐' },
+    { re: /MemoryError|out of memory|内存不足|allocate a buffer/i, lv: 'err', tip: '内存不足，先做内存优化' },
+    { re: /Traceback \(most recent call last\)/i, lv: 'err', tip: '引擎报错，看 Traceback 最后一行' },
+    { re: /PermissionError|拒绝访问|Access is denied/i, lv: 'warn', tip: '权限不足，试试管理员运行' },
+    { re: /未找到引擎|找不到 RVC 引擎/i, lv: 'warn', tip: '引擎路径不对' },
+    { re: /onnx|\.pth/i, lv: 'warn', tip: '模型相关，确认声线包模型完整' },
+  ];
+  const hits = rules.filter((r) => r.re.test(logTxt));
+  if (!logTxt.trim()) add('info', '本次日志为空，先跑一次转换再看诊断');
+  else if (!hits.length) add('ok', '日志里没有发现常见错误');
+  else for (const x of hits) add(x.lv, '[命中] ' + x.tip);
+  add('info', '内存 ' + $('memFree').textContent + ' / ' + $('memTotal').textContent + '　CPU ' + $('stCpu').textContent + '　硬盘 ' + $('stDisk').textContent);
+  out.innerHTML = rows.map((r) => diagLine(r.lv, r.tx)).join('');
+  lastDiagText = rows.map((r) => '[' + r.lv.toUpperCase() + '] ' + r.tx).join('\n');
+  const bad = rows.filter((r) => r.lv === 'err').length;
+  toast(bad ? ('体检完成：发现 ' + bad + ' 个问题') : '体检完成：没有发现问题', bad ? 4000 : 2000);
+}
+if ($('diagBtn')) $('diagBtn').onclick = runDiagnose;
+
+// ── 文件自检 / 一键修复 ──
+async function renderRepair(auto) {
+  const out = $('repairOut');
+  const srcBox = $('repairSrc');
+  if (!out) return;
+  out.innerHTML = '<span style="color:#aab">检测中…</span>';
+  const r = await window.rpc.repairCheck();
+  if (!r || !r.ok) { out.innerHTML = '<span style="color:#c04a63">检测失败：' + ((r && r.msg) || '未知错误') + '</span>'; return; }
+  if (srcBox) srcBox.textContent = '可用修复来源：' + ((r.sources && r.sources.length) ? r.sources.join('、') : '无');
+  out.innerHTML = r.items.map((it) => {
+    const ok = it.ok;
+    const icon = ok ? '✅' : (it.critical ? '⚠️' : '❌');
+    const color = ok ? '#2f7d4f' : (it.critical ? '#a8662b' : '#c04a63');
+    let hint = it.ok ? '正常' : (it.msg || '缺失');
+    if (!ok && it.critical) hint = '缺失（软件本体文件，需重新安装）';
+    if (!ok && it.key === 'asar') hint = '缺失/损坏（需重新安装；自动恢复旧备份会导致版本回退，已禁用）';
+    return '<div style="display:flex;gap:8px;align-items:baseline;padding:4px 0;border-bottom:1px dashed #eef1f8">' +
+      '<span style="flex-shrink:0">' + icon + '</span>' +
+      '<span style="color:' + color + ';font-weight:600;flex-shrink:0;min-width:130px">' + it.label + '</span>' +
+      '<span style="color:#889;font-size:11px;word-break:break-all">' + hint + '</span>' +
+      '</div>';
+  }).join('') + '<div style="margin-top:8px;font-weight:600;color:' + (r.badCount ? '#c04a63' : '#2f7d4f') + '">' +
+    (r.badCount ? ('共 ' + r.badCount + ' 项需要修复，点上方「一键修复缺失」') : '全部正常') + '</div>';
+  if (auto && !r.badCount) toast('文件完整性检查通过', 1600);
+  return r;
+}
+if ($('repairCheckBtn')) $('repairCheckBtn').onclick = () => renderRepair(false);
+if ($('repairFixBtn')) $('repairFixBtn').onclick = async () => {
+  const btn = $('repairFixBtn');
+  btn.disabled = true; btn.textContent = '修复中…';
+  try {
+    const r = await window.rpc.repairFix([]);
+    if (!r || !r.ok) { toast('修复失败：' + ((r && r.msg) || ''), 4000); return; }
+    const fixed = (r.results || []).filter((x) => x.ok);
+    const failed = (r.results || []).filter((x) => !x.ok);
+    const needRestart = fixed.some((x) => x.restart);
+    toast('已修复 ' + fixed.length + ' 项' + (failed.length ? ('，' + failed.length + ' 项失败') : '') + (r.badCount ? ('，仍有 ' + r.badCount + ' 项缺失') : '，全部齐全') + (needRestart ? '，请重启软件生效' : ''), 5000);
+    await renderRepair(false);
+  } catch (e) { toast('修复异常：' + e.message, 4000); }
+  finally { btn.disabled = false; btn.textContent = '一键修复缺失'; }
+};
+if ($('diagCopy')) $('diagCopy').onclick = async () => {
+  if (!lastDiagText) { toast('请先点「开始诊断」'); return; }
+  try { await navigator.clipboard.writeText(lastDiagText); toast('诊断结果已复制到剪贴板'); } catch (e) { toast('复制失败：' + e.message, 4000); }
+};
+if ($('diagFile')) $('diagFile').onclick = async () => {
+  if (!lastDiagText) { toast('请先点「开始诊断」'); return; }
+  const stamp = new Date().toISOString().replace(/[:T]/g, '-').slice(0, 19);
+  const r = await window.rpc.saveText('RVC诊断结果-' + stamp + '.txt', 'RVC 声线转音 诊断结果\n' + stamp + '\n\n' + lastDiagText + '\n');
+  toast(r && r.ok ? ('已保存到：' + r.path) : ('保存失败：' + ((r && r.msg) || '')), 4000);
+};
+
+// 日志记录
+let errLogText = '';
+window.__pushErr = (t) => { errLogText += t + '\n'; if (errLogText.length > 40000) errLogText = errLogText.slice(-30000); };
+if ($('logRefresh')) $('logRefresh').onclick = () => {
+  const t = logHistory.join('\n');
+  $('convLog').textContent = t.trim() || '（暂无转换日志）';
+  $('convLog').scrollTop = $('convLog').scrollHeight;
+  toast('转换日志已刷新');
+};
+if ($('logReset')) $('logReset').onclick = () => {
+  if (!confirm('确定清空转换日志？')) return;
+  logHistory.length = 0;
+  if ($('log')) $('log').textContent = '';
+  $('convLog').textContent = '（暂无转换日志）';
+  toast('转换日志已重置');
+};
+if ($('errRefresh')) $('errRefresh').onclick = () => {
+  $('errLog').textContent = errLogText.trim() || '（暂无报错）';
+  $('errLog').scrollTop = $('errLog').scrollHeight;
+  toast('报错日志已刷新');
+};
+if ($('errReset')) $('errReset').onclick = () => {
+  errLogText = '';
+  $('errLog').textContent = '（暂无报错）';
+  toast('报错日志已重置');
+};
+
+// 小游戏（列表 + 点开即玩）
+const GAMES = [
+  { id: 'snake360', name: '360° 贪吃蛇', icon: '🔄', desc: '←/→ 连续转向，移植自你的 Pygame 版' },
+  { id: 'watermelon', name: '合成大西瓜', icon: '🍉', desc: '点击掉落水果，同种相撞合成更大的，别堆过线' },
+  { id: 'snake', name: '贪吃蛇', icon: '🐍', desc: '方向键控制，吃到红点变长，别撞墙' },
+  { id: 'guess', name: '猜数字', icon: '🎯', desc: '想一个 1~999 的数，看几次能猜中' },
+];
+function startGame(id) {
+  try { window.rpc.openGame(id); } catch (e) { toast('打开游戏窗口失败：' + e.message, 4000); }
+}
+if ($('gameList')) {
+  $('gameList').innerHTML = GAMES.map((g) =>
+    '<div style="display:flex;align-items:center;gap:9px;border:1px solid #e3e9f7;border-radius:10px;padding:8px 10px;background:#fff">' +
+    '<button class="mbtn fbtn" data-g="' + g.id + '" style="background:var(--ac);color:#fff;border-color:transparent;white-space:nowrap;flex-shrink:0">开始游戏</button>' +
+    '<span style="font-size:17px">' + g.icon + '</span>' +
+    '<span style="color:#556"><b>' + g.name + '</b>：<span style="color:#889">' + g.desc + '</span></span>' +
+    '</div>').join('');
+  Array.prototype.slice.call($('gameList').querySelectorAll('button[data-g]')).forEach((b) => {
+    b.onclick = () => { startGame(b.dataset.g); $('gameHost').scrollIntoView({ behavior: 'smooth', block: 'nearest' }); };
+  });
+}
+
+// 原作者
+const AUTHORS = [
+  { plat: '抖音', name: '幼辞PS', id: 'PUBGMobile30', url: 'https://www.douyin.com/user/MS4wLjABAAAA4X17Z_cLkmpc5ei8BK47O-d79pH21Av2kr07vSf3yoPw0wj81HRDqnMduM0HSdY0?from_tab_name=main' },
+  { plat: '抖音', name: '米基哈', id: 'YOUCI_DIY2026', url: 'https://www.douyin.com/user/MS4wLjABAAAAze8B7Shs207ePe11y28jdJ8yvtRUUf39qsig7QQOoMDmVT1uSCarJJNITfj0sC3O?from_tab_name=main' },
+  { plat: '快手', name: '幼辞PS', id: 'PUBGMobile30', url: 'https://www.kuaishou.com/profile/3x6wziyhf4h9gym?source=SEARCH' },
+];
+if ($('authorList')) {
+  $('authorList').innerHTML = AUTHORS.map((a) =>
+    '<div style="display:flex;align-items:center;gap:10px;border:1px solid #e3e9f7;border-radius:10px;padding:9px 11px;background:#fff">' +
+    '<div style="flex:1;min-width:0"><div style="color:#556"><b>' + a.plat + ' / ' + a.name + '</b></div><div style="color:#889;margin-top:2px">' + a.id + '</div></div>' +
+    '<button class="mbtn" data-u="' + a.url + '">查看主页</button>' +
+    '</div>').join('');
+  Array.prototype.slice.call($('authorList').querySelectorAll('button[data-u]')).forEach((b) => {
+    b.onclick = () => window.rpc.openUrl(b.dataset.u);
+  });
+}
+</script>
+<div id="savedBgList" style="display:none;flex-direction:column;gap:6px"></div>
+</body>
+</html>
