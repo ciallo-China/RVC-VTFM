@@ -263,6 +263,8 @@ body.bg-on #sfRam, body.bg-on #sfCpu, body.bg-on #sfDisk { transition: width .1s
           <div class="param"><label>输出增益</label><input id="rtGain" type="number" step="0.05" value="1"></div>
           <div class="param"><label>采样率</label><select id="rtSr"><option value="48000">48000 Hz</option><option value="44100">44100 Hz</option></select></div>
           <div class="param"><label>块大小</label><select id="rtBlock"><option value="512">512</option><option value="1024" selected>1024</option><option value="2048">2048</option></select></div>
+          <div class="param"><label>音高算法</label><select id="rtF0"><option value="pm">pm（极速省内存）</option><option value="harvest">harvest（轻量）</option><option value="crepe">crepe（较准）</option><option value="rmvpe">rmvpe（最准）</option></select></div>
+          <div class="param"><label>CPU 线程</label><select id="rtTh"><option value="auto">auto（自动）</option><option value="1" selected>1（省内存）</option><option value="2">2</option><option value="4">4</option><option value="8">8</option><option value="16">16</option><option value="32">32</option><option value="64">64</option><option value="128">128</option></select></div>
         </div>
       </div>
       <div id="rtSysSlot" style="flex-shrink:0"></div>
@@ -544,7 +546,7 @@ body.bg-on #sfRam, body.bg-on #sfCpu, body.bg-on #sfDisk { transition: width .1s
 
 <script>
 const $ = (id) => document.getElementById(id);
-const VERSION = '2.6.01.101';
+const VERSION = '2.6.02.100';
 // 全局错误捕获：任何未处理异常都弹提示，避免“点了没反应又没报错”
 window.addEventListener('error', (ev) => {
   const m = (ev && ev.message) || '未知脚本错误';
@@ -727,6 +729,8 @@ async function refreshState() {
       if (rc.f0upKey != null && $('rtPitch')) { $('rtPitch').value = String(rc.f0upKey); }
       if (rc.indexRate != null && $('rtRate')) { $('rtRate').value = String(rc.indexRate); }
       if (rc.formant != null && $('rtFormant')) { $('rtFormant').value = String(rc.formant); }
+      if (rc.f0method && $('rtF0')) { $('rtF0').value = String(rc.f0method); }
+      if (rc.torch_threads && $('rtTh')) { $('rtTh').value = String(rc.torch_threads); }
       const wantName = (state.settings && state.settings.rtVoice) || '';
       if (wantName && state.voices) {
         const vi = state.voices.findIndex((x) => x.name === wantName);
@@ -773,6 +777,8 @@ async function refreshVoices() {
       if (rc.f0upKey != null && $('rtPitch')) { $('rtPitch').value = String(rc.f0upKey); }
       if (rc.indexRate != null && $('rtRate')) { $('rtRate').value = String(rc.indexRate); }
       if (rc.formant != null && $('rtFormant')) { $('rtFormant').value = String(rc.formant); }
+      if (rc.f0method && $('rtF0')) { $('rtF0').value = String(rc.f0method); }
+      if (rc.torch_threads && $('rtTh')) { $('rtTh').value = String(rc.torch_threads); }
       const wantName = (state.settings && state.settings.rtVoice) || '';
       if (wantName && state.voices) {
         const vi = state.voices.findIndex((x) => x.name === wantName);
@@ -860,6 +866,8 @@ function renderVoices() {
       if (rc.f0upKey != null && $('rtPitch')) { $('rtPitch').value = String(rc.f0upKey); }
       if (rc.indexRate != null && $('rtRate')) { $('rtRate').value = String(rc.indexRate); }
       if (rc.formant != null && $('rtFormant')) { $('rtFormant').value = String(rc.formant); }
+      if (rc.f0method && $('rtF0')) { $('rtF0').value = String(rc.f0method); }
+      if (rc.torch_threads && $('rtTh')) { $('rtTh').value = String(rc.torch_threads); }
       const wantName = (state.settings && state.settings.rtVoice) || '';
       if (wantName && state.voices) {
         const vi = state.voices.findIndex((x) => x.name === wantName);
@@ -899,6 +907,8 @@ function renderVoices() {
       if (rc.f0upKey != null && $('rtPitch')) { $('rtPitch').value = String(rc.f0upKey); }
       if (rc.indexRate != null && $('rtRate')) { $('rtRate').value = String(rc.indexRate); }
       if (rc.formant != null && $('rtFormant')) { $('rtFormant').value = String(rc.formant); }
+      if (rc.f0method && $('rtF0')) { $('rtF0').value = String(rc.f0method); }
+      if (rc.torch_threads && $('rtTh')) { $('rtTh').value = String(rc.torch_threads); }
       const wantName = (state.settings && state.settings.rtVoice) || '';
       if (wantName && state.voices) {
         const vi = state.voices.findIndex((x) => x.name === wantName);
@@ -1603,6 +1613,8 @@ async function rtToggle() {
     sampleRate: parseInt($('rtSr').value, 10),
     blockSize: parseInt($('rtBlock').value, 10),
     gain: parseFloat($('rtGain').value),
+    f0method: $('rtF0') ? $('rtF0').value : 'rmvpe',
+    torch_threads: $('rtTh') ? $('rtTh').value : '1',
   };
   btn.disabled = true;
   rtSetState('启动中…', false);
@@ -1622,6 +1634,7 @@ async function rtToggle() {
       inputDevice: cfg.inputDevice, outputDevice: cfg.outputDevice,
       sampleRate: cfg.sampleRate, blockSize: cfg.blockSize, gain: cfg.gain,
       f0upKey: cfg.f0upKey, indexRate: cfg.indexRate, formant: cfg.formant,
+      f0method: cfg.f0method, torch_threads: cfg.torch_threads,
     },
     rtVoice: v.name,
   });
@@ -2059,6 +2072,8 @@ function cropVoiceCover(name, dataUrl) {
       if (rc.f0upKey != null && $('rtPitch')) { $('rtPitch').value = String(rc.f0upKey); }
       if (rc.indexRate != null && $('rtRate')) { $('rtRate').value = String(rc.indexRate); }
       if (rc.formant != null && $('rtFormant')) { $('rtFormant').value = String(rc.formant); }
+      if (rc.f0method && $('rtF0')) { $('rtF0').value = String(rc.f0method); }
+      if (rc.torch_threads && $('rtTh')) { $('rtTh').value = String(rc.torch_threads); }
       const wantName = (state.settings && state.settings.rtVoice) || '';
       if (wantName && state.voices) {
         const vi = state.voices.findIndex((x) => x.name === wantName);

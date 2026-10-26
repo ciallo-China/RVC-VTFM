@@ -270,7 +270,6 @@ function findPython() {
     const cands = [];
     if (s.enginePath) cands.push(s.enginePath);
     cands.push(path.join(ROOT, 'Engine'));
-    cands.push('C:\\GAME APPS\\RVC Fabric');
     trace.push('cands=' + JSON.stringify(cands));
     for (const base of cands) {
       if (!base || !fs.existsSync(base)) { trace.push('skip(no base): ' + base); continue; }
