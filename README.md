@@ -98,7 +98,7 @@ VB-Cable (虚拟声卡) 下载解压后运行里面的安装程序装一次即�
 
 ## 推荐设备
 
-- CPU：AMD R5 3600X
+- CPU：AMD R5 5500GT
 - GPU：NVIDIA GTX1060Ti 6GB
 - RAM：DDR4 8GB 2666MHZ C18
 
@@ -107,3 +107,14 @@ VB-Cable (虚拟声卡) 下载解压后运行里面的安装程序装一次即�
 - 本项目源码采用 [MIT License](./LICENSE) 许可协议开源
 - 模型权重、音色包及第三方资源遵循其原始许可协议
 - **免责声明**：请勿将本软件用于伪造身份、欺诈或其他违法用途。使用他人声音进行训练或转换前，请取得原权利人授权。使用者应遵守当地法律法规(切勿商用)
+
+## 致谢
+
+感谢以下优秀开源项目为 RVC VTFM 提供的技术支持：
+
+- [Retrieval-based-Voice-Conversion-WebUI](https://github.com/RVC-Project/Retrieval-based-Voice-Conversion-WebUI) — 核心算法与上游基础
+- [ContentVec](https://github.com/auspicious3000/contentvec) · [VITS](https://github.com/jaywalnut310/vits) · [HiFi-GAN](https://github.com/jik876/hifi-gan) · [RMVPE](https://github.com/Dream-High/RMVPE) — 核心声学模型与音高算法
+- [faiss](https://github.com/facebookresearch/faiss) · [TorchGate](https://github.com/timsainb/TorchGate) — 检索与实时降噪
+- [FCPE](https://github.com/CNChTu/FCPE) · [Parselmouth](https://github.com/YannickJadoul/Parselmouth) · [torchcrepe](https://github.com/maxrmorrison/torchcrepe) — 可选音高算法
+- [PyMSS](https://github.com/RVC-Project/Retrieval-based-Voice-Conversion-WebUI) — 人声分离引擎（跟随上游 RVC，已取代 UVR5）· [Ultimate Vocal Remover](https://github.com/Anjok07/ultimatevocalremovergui) — 分离模型来源 · [FFmpeg](https://github.com/FFmpeg/FFmpeg) — 音频处理
+- [VB-Audio Virtual Cable](https://vb-audio.com/Cable/) — 虚拟声卡（把变声结果送入游戏/语音软件）
