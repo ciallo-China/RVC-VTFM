@@ -25,6 +25,10 @@
 
 # 介绍(仅供展示部分功能)
 
+</div>
+
+---
+
 ## RVC VTFM
 
 RVC VTFM 是一款本地声音转换桌面软件，基于 [RVC Fabric](https://github.com/Turing-Mirror/RVC-Fabric) 技术深度定制。它能把一段音频或视频里的声线转换成其它的声线，数据全程只在你自己的电脑上处理，不需要联网上传，也不需要自己装 Python 或配置浏览器环境，装完打开就能用
