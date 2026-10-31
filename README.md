@@ -19,7 +19,9 @@
 <!-- qq-group -->
 
 ## 下载安装包版本
-[![Windows](https://img.shields.io/badge/Windows-RVC%2026.2-purple?style=flat-square)](https://raw.githubusercontent.com/ciallo-China/GitHub-ciallo-RVC-VTFM/7faace76125c14c3715bc8d16b9260d0784c273a/RVC-VTFM-Setup-2.6.02.100.exe)
+
+[![Windows 2.7.0](https://img.shields.io/badge/Windows-RVC%2027.0-purple?style=flat-square)](https://github.com/ciallo-China/RVC-VTFM/releases/download/RVC-27.0/RVC-VTFM-Setup-2.7.00.000.exe)
+[![Windows 2.6.2](https://img.shields.io/badge/Windows-RVC%2026.2-C47EBA?style=flat-square)](https://github.com/ciallo-China/RVC-VTFM/releases/download/RVC-26.2/RVC-VTFM-Setup-2.6.02.100.exe)
 
 # 介绍(仅供展示部分功能)
 
