@@ -1,22 +1,31 @@
 <div align="center">
 
-<img src="软件图标.ico" alt="RVC VTFM" width="150">
+<img src="assets/软件图标.png" alt="RVC VTFM" width="420">
 
 [![Licence](https://img.shields.io/badge/LICENSE-MIT-green.svg?style=flat-square)](./LICENSE)
-[![Based on RVC](https://img.shields.io/badge/based%20on-RVC%20WebUI-1289F0?style=flat-square)](https://github.com/RVC-Project/Retrieval-based-Voice-Conversion-WebUI)
+[![Based on RVC](https://img.shields.io/badge/Based%20on-RVC%20WebUI-1289F0?style=flat-square)](https://github.com/RVC-Project/Retrieval-based-Voice-Conversion-WebUI)
 
 [GitHub 仓库](https://github.com/ciallo-China/GitHub-ciallo-RVC-VTFM)   ["原作者"仓库](https://github.com/Turing-Mirror/RVC-Fabric)
 
-**社媒**　[抖音 @幼辞PS](https://www.douyin.com/user/MS4wLjABAAAA4X17Z_cLkmpc5ei8BK47O-d79pH21Av2kr07vSf3yoPw0wj81HRDqnMduM0HSdY0?from_tab_name=main)（抖音号`PUBGMobile30`）　·　[抖音 @米基哈](https://www.douyin.com/user/MS4wLjABAAAAze8B7Shs207ePe11y28jdJ8yvtRUUf39qsig7QQOoMDmVT1uSCarJJNITfj0sC3O?from_tab_name=main)（抖音号 `YOUCI_DIY2026`）　·　[快手 @幼辞PS](https://www.kuaishou.com/profile/3x6wziyhf4h9gym?source=SEARCH)（快手号 `PUBGMoblie30`）　·　QQ 群 @洛安开源社区（群号 `1020835327`）
+**社媒**
+　·　[抖音 @幼辞PS](https://www.douyin.com/user/MS4wLjABAAAA4X17Z_cLkmpc5ei8BK47O-d79pH21Av2kr07vSf3yoPw0wj81HRDqnMduM0HSdY0?from_tab_name=main)（抖音号 PUBGMobile30）
+　·　[抖音 @米基哈](https://www.douyin.com/user/MS4wLjABAAAAze8B7Shs207ePe11y28jdJ8yvtRUUf39qsig7QQOoMDmVT1uSCarJJNITfj0sC3O?from_tab_name=main)（抖音号 YOUCI_DIY2026）
+　·　[快手 @幼辞PS](https://www.kuaishou.com/profile/3x6wziyhf4h9gym?source=SEARCH)（快手号 PUBGMoblie30）
+　·　QQ 群 @洛安开源社区（群号 1130474363）
 
 
 <!-- qq-group -->
-<img src="QQ1020835327.jpg" alt="QQ 群二维码" width="200">
+<img src="assets\1130474363.jpg" alt="QQ 群二维码" width="200">
 <!-- qq-group -->
+
+## 下载安装包版本
+[![Windows](https://img.shields.io/badge/Windows-RVC%2026.2-purple?style=flat-square)](https://raw.githubusercontent.com/ciallo-China/GitHub-ciallo-RVC-VTFM/7faace76125c14c3715bc8d16b9260d0784c273a/RVC-VTFM-Setup-2.6.02.100.exe)
+
+# 介绍(仅供展示部分功能)
 
 ## RVC VTFM
 
-RVC VTFM 是一款面向 Windows 的本地声音转换桌面软件，基于 RVC 技术深度定制。它能把一段音频或视频里的人声换成另一个人的声线，声音数据全程只在你自己的电脑上处理，不需要联网上传，也不需要自己装 Python 或配置浏览器环境，装完打开就能用
+RVC VTFM 是一款本地声音转换桌面软件，基于 [RVC Fabric](https://github.com/Turing-Mirror/RVC-Fabric) 技术深度定制。它能把一段音频或视频里的声线转换成其它的声线，数据全程只在你自己的电脑上处理，不需要联网上传，也不需要自己装 Python 或配置浏览器环境，装完打开就能用
 
 ## 核心功能
 
@@ -27,6 +36,17 @@ RVC VTFM 是一款面向 Windows 的本地声音转换桌面软件，基于 RVC 
 实时变音配合虚拟声卡使用，可以在通话、直播、游戏语音里实时改变自己的声音。它走的是轻量变调方案，对电脑配置要求很低，老机器也能流畅运行
 
 广场负责下载引擎和声线。引擎分成「引擎核心」和「运行时」两类，声线则可以在官方源和第三方源里挑。广场支持多线程下载和断点续传，下到一半断了也能接着下
+
+## 扩展栏
+
+扩展栏位于主界面的右侧（点击展开条即可展开扩展栏）
+
+| 类型 | 作用 |
+| :--- | :--- |
+| 声线频率 | 显示输入端的频率 |
+| 块状态 | 显示块Hz的转换状态 |
+| 数据 | 变音时的参数数据 |
+| 调试日志 | 显示引擎的核心输出 |
 
 ## 快速开始
 
@@ -43,9 +63,9 @@ RVC VTFM 是一款面向 Windows 的本地声音转换桌面软件，基于 RVC 
 | 项目 | 选择 |
 | :--- | :--- |
 | 软件输入 | 真实麦克风(或虚拟麦克风) |
-| 软件输出 | CABLE Input |
+| 软件输出 | CABLE Input(虚拟扬声器) |
 | 游戏或语音软件的麦克风 | CABLE Output |
-| Windows 默认播放设备 | 物理耳机（不要选 CABLE） |
+| Windows 默认播放设备 | 物理耳机(不要选 CABLE) |
 
 VB-Cable (虚拟声卡) 下载解压后运行里面的安装程序装一次即可(所在目录"[安装目录]\RVC VTFM\Tools\vbcable"以管理员运行"VBCABLE_Setup")
 
@@ -74,7 +94,7 @@ VB-Cable (虚拟声卡) 下载解压后运行里面的安装程序装一次即�
 
 - CPU：AMD R5 3600X
 - GPU：NVIDIA GTX1060Ti 6GB
-- RAM：8GB 2666MHZ C18
+- RAM：DDR4 8GB 2666MHZ C18
 
 ## 免责声明
 

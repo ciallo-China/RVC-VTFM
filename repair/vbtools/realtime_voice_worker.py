@@ -22,6 +22,7 @@ import sys
 import threading
 import time
 import traceback
+from collections import deque
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent          # C:\RVC VTFM（Tools 的上一级）
@@ -262,14 +263,128 @@ def _run_config(cfg_path: str) -> int:
     out_dev = cfg.get("outputDevice")
 
     engine = VoiceEngine(cfg)
-    engine._ensure_rvc()
+    if str(cfg.get("mode") or "rvc") != "dsp":
+        engine._ensure_rvc()
+
+    # ── RVC 声线模型：mode=rvc 时加载；mode=dsp 时不加载直接走变调 ──
+    rvc_vc = None
+    rvc_pitch = int(cfg.get("f0upKey") or 0)
+    rvc_f0 = str(cfg.get("f0method") or "harvest")
+    rvc_idx = str(cfg.get("indexPath") or "")
+    rvc_idx_rate = float(cfg.get("indexRate") or 0)
+    rvc_protect = float(cfg.get("protect") or 0.33)
+    rvc_sr = 40000
+    _mode = str(cfg.get("mode") or "rvc")
+    _pth = str(cfg.get("pthPath") or "")
+    if _mode == "dsp":
+        emit({"type": "log", "msg": "DSP 变音模式（变调 + 共振峰，低延迟无模型噪声）"})
+        emit({"type": "status", "state": "opening-audio", "msg": "正在打开音频设备…"})
+        time.sleep(0.5)
+    elif _pth and os.path.exists(_pth):
+        try:
+            emit({"type": "log", "msg": "⏳ 加载声线模型（首次约 1-2 分钟）…"})
+            from dotenv import load_dotenv
+            from configs.config import Config
+            from infer.modules.vc.modules import VC
+            from infer.lib.dml_compat import apply_for
+            load_dotenv()
+            _conf = Config()
+            _conf.device = "cpu"
+            apply_for(_conf)
+            rvc_vc = VC(_conf)
+            rvc_vc.get_vc(_pth)
+            import gc as _gc
+            _gc.collect()
+            _pipe = getattr(rvc_vc, "pipeline", None)
+            if _pipe is not None and hasattr(_pipe, "shrink_windows"):
+                try:
+                    _pipe.shrink_windows()
+                    _pipe.shrink_windows()
+                except Exception:
+                    pass
+            try:
+                rvc_sr = int(getattr(rvc_vc, "tgt_sr", 0) or 40000)
+            except Exception:
+                rvc_sr = 40000
+            emit({"type": "log", "msg": "✅ 声线模型加载完成，进入实时推理"})
+            # 通知前端释放 WebAudio 麦克风，稍等片刻再开 PortAudio，避免抢设备
+            emit({"type": "status", "state": "opening-audio", "msg": "正在打开音频设备…"})
+            time.sleep(0.5)
+        except Exception as _e:
+            emit({"type": "log", "msg": "声线模型加载失败，退回 DSP 变调：%s" % str(_e)[:120]})
+            rvc_vc = None
 
     in_q: "queue.Queue" = queue.Queue(maxsize=8)
 
+    # ── 实时统计（供扩展面板：频谱 / 块状态 / 指标） ──
+    stat = {
+        "ok": 0, "fail": 0, "drop": 0, "same": 0,
+        "in_rms": 0.0, "out_rms": 0.0,
+        "proc_ms": 0.0,
+        "pending": deque(),
+        "last_lat": 0.0,
+        "stability": 100.0,
+    }
+    _stat_lock = threading.Lock()
+    spec_q: "queue.Queue" = queue.Queue(maxsize=2)
+
     def cb(indata, frames, time_info, status):
         try:
-            if not in_q.full():
-                in_q.put(indata[:, 0].copy())
+            blk = indata[:, 0].copy()
+            try:
+                if not spec_q.full():
+                    spec_q.put_nowait(blk)
+            except Exception:
+                pass
+            r = 0.0
+            try:
+                r = float(np.sqrt(float(np.mean(blk * blk))))
+                with _stat_lock:
+                    stat["in_rms"] = stat["in_rms"] * 0.7 + r * 0.3
+            except Exception:
+                pass
+            if rvc_vc is not None:
+                if rvc_infer_type == "queue":
+                    # 队列分段：有声累积，静音（含完全静音）累积 silence 用于段落结束
+                    if r >= SEG_VOICED:
+                        seg_st["active"] = True
+                        seg_st["silence"] = 0
+                        seg_st["buf"].append(blk)
+                        seg_st["total"] += len(blk)
+                        if seg_st["total"] >= SEG_MAX:
+                            _commit_seg()
+                    else:
+                        if seg_st["active"]:
+                            seg_st["buf"].append(blk)
+                            seg_st["total"] += len(blk)
+                            seg_st["silence"] += len(blk)
+                            if seg_st["silence"] >= SEG_END:
+                                _commit_seg()
+                    return
+                # 实时 / 时间推理：完全静音丢弃，其余累积固定时间切分
+                if r < 0.0005:
+                    return
+                submit = False
+                with rvc_lock:
+                    rvc_in_blocks.append(blk)
+                    rvc_st["in_n"] += len(blk)
+                    if rvc_st["in_n"] >= rvc_chunk_n:
+                        chunk = np.concatenate(list(rvc_in_blocks))
+                        rvc_in_blocks.clear()
+                        rvc_st["in_n"] = 0
+                        submit = True
+                if submit:
+                    seg_q.append(chunk)
+                return
+            # DSP 模式：完全静音丢弃
+            if r < 0.0005:
+                return
+            if in_q.full():
+                with _stat_lock:
+                    stat["drop"] += 1
+                    stat["pending"].append(2)
+                return
+            in_q.put(blk)
         except Exception:
             pass
 
@@ -293,20 +408,188 @@ def _run_config(cfg_path: str) -> int:
     use_sr_in = pick_rate(in_dev, sr)
     use_sr_out = pick_rate(out_dev, sr)
 
+    # ── RVC 推理：分段 + 串行队列转换 ──
+    rvc_in_blocks = deque()
+    rvc_st = {"in_n": 0, "busy": 0}
+    rvc_infer_type = str(cfg.get("inferType") or "queue")  # realtime / queue / time
+    rvc_time_sec = float(cfg.get("timeSec") or 5)
+    if rvc_infer_type == "realtime":
+        rvc_chunk_n = use_sr_in  # 实时：固定 1 秒切分
+    elif rvc_infer_type == "time":
+        rvc_chunk_n = max(int(use_sr_in * 0.5), int(use_sr_in * rvc_time_sec))  # 时间：每 N 秒切
+    else:
+        rvc_chunk_n = use_sr_in  # queue 不用它，按停顿切句
+    rvc_out_q = queue.Queue(maxsize=8)
+    rvc_lock = threading.Lock()
+    seg_q = deque()  # 待转换段落队列
+    seg_st = {"buf": [], "active": False, "silence": 0, "total": 0}
+    SEG_MIN = int(use_sr_in * 0.5)   # 最小段落 0.5 秒（太短的忽略，减少噪声段）
+    SEG_END = int(use_sr_in * 0.6)   # 静音 0.6 秒算一句说完（按完整一句话切分）
+    SEG_MAX = int(use_sr_in * 10)    # 段落最长 10 秒强制切分（音质优先，差设备等久一点）
+    SEG_VOICED = 0.0015              # 有声阈值（RMS）
+
+    def _rvc_infer(chunk):
+        try:
+            tmp_dir = os.path.join(str(ENGINE), "TEMP")
+            os.makedirs(tmp_dir, exist_ok=True)
+            tmp_in = os.path.join(tmp_dir, "_rt_in.wav")
+            from scipy.io import wavfile as _wf
+            _wf.write(tmp_in, use_sr_in, chunk.astype(np.float32))
+            info, wav_opt = rvc_vc.vc_single(
+                0, tmp_in, rvc_pitch, None, rvc_f0,
+                rvc_idx, None, rvc_idx_rate, 3, 0, 1, rvc_protect,
+            )
+            if wav_opt and wav_opt[1] is not None:
+                # vc_single 返回 (tgt_sr, audio)，wav_opt[1] 才是音频，wav_opt[0] 是采样率
+                out = np.asarray(wav_opt[1], dtype=np.float32)
+                out = np.atleast_1d(out)
+                if out.ndim > 1:
+                    out = out.mean(axis=1)
+                out = out.astype(np.float32)
+                out_sr = 40000
+                try:
+                    if len(wav_opt) > 0 and wav_opt[0]:
+                        out_sr = int(wav_opt[0])
+                except Exception:
+                    pass
+                if out_sr > 0 and int(out_sr) != int(use_sr_out):
+                    try:
+                        # 高质量多相重采样（避免最近邻失真导致炸麦/杂音）
+                        from scipy.signal import resample_poly
+                        from fractions import Fraction
+                        _fr = Fraction(use_sr_out, out_sr).limit_denominator(1000)
+                        out = resample_poly(out.astype(np.float64), _fr.numerator, _fr.denominator).astype(np.float32)
+                    except Exception:
+                        n = max(1, int(len(out) * use_sr_out / out_sr))
+                        idx = np.linspace(0, len(out) - 1, n).astype(np.int64)
+                        out = out[idx]
+                # 去直流偏移（消除电流声/嗡嗡声）
+                try:
+                    out = out - float(np.mean(out))
+                except Exception:
+                    pass
+                # 削波保护 + 段落边界淡入淡出（减少咔哒声）
+                out = np.clip(out, -0.98, 0.98)
+                try:
+                    _fade = min(int(use_sr_out * 0.006), max(1, len(out) // 4))
+                    if len(out) > _fade * 2:
+                        _win = np.linspace(0, 1, _fade, dtype=np.float32)
+                        out[:_fade] = out[:_fade] * _win
+                        out[-_fade:] = out[-_fade:] * _win[::-1]
+                except Exception:
+                    pass
+                with _stat_lock:
+                    stat["ok"] += 1
+                    stat["pending"].append(0)
+                    stat["played"] = stat.get("played", 0) + len(out)
+                rvc_out_q.put(out)
+                try:
+                    emit({"type": "log", "msg": "推理完成，输出 %.2f 秒" % (len(out) / max(1, use_sr_out))})
+                except Exception:
+                    pass
+            else:
+                with _stat_lock:
+                    stat["fail"] += 1
+                    stat["pending"].append(1)
+        except Exception as _e:
+            try:
+                emit({"type": "log", "msg": "实时推理失败：%s" % str(_e)[:100]})
+            except Exception:
+                pass
+            with _stat_lock:
+                stat["fail"] += 1
+                stat["pending"].append(1)
+
+    def _commit_seg():
+        if seg_st["total"] >= SEG_MIN:
+            try:
+                chunk = np.concatenate(seg_st["buf"])
+                seg_q.append(chunk)
+            except Exception:
+                pass
+        seg_st["buf"] = []
+        seg_st["active"] = False
+        seg_st["silence"] = 0
+        seg_st["total"] = 0
+
+    def _convert_loop():
+        while not stop_flag.is_set():
+            try:
+                seg = seg_q.popleft()
+            except IndexError:
+                time.sleep(0.05)
+                continue
+            _rvc_infer(seg)
+
     out_ring = np.zeros(0, dtype=np.float32)
 
     def play_cb(outdata, frames, time_info, status):
         nonlocal out_ring
         need = frames
+        if rvc_vc is not None:
+            # RVC：从推理结果队列取输出（推理未跟上时输出静音）
+            while len(out_ring) < need:
+                try:
+                    out = rvc_out_q.get_nowait()
+                    out_ring = np.concatenate([out_ring, out])
+                except queue.Empty:
+                    break
+            if len(out_ring) >= need:
+                outdata[:, 0] = out_ring[:need]
+                out_ring = out_ring[need:]
+                with _stat_lock:
+                    stat["played_out"] = stat.get("played_out", 0) + need
+            else:
+                if len(out_ring) > 0:
+                    outdata[: len(out_ring), 0] = out_ring
+                    outdata[len(out_ring):, 0] = 0.0
+                    out_ring = np.zeros(0, dtype=np.float32)
+                else:
+                    outdata[:, 0] = 0.0
+            return
         while len(out_ring) < need:
             try:
                 blk = in_q.get_nowait()
             except queue.Empty:
                 break
+            code = 0
+            proc = blk
+            record = True
             try:
-                proc = engine.process(blk)
+                rms = float(np.sqrt(float(np.mean(blk * blk))))
+                if rms < 0.0005:
+                    # 完全静音（麦克风未接/无输入）：不记块状态，直接透传
+                    record = False
+                else:
+                    quiet = rms < 0.0025
+                    idle = (abs(getattr(engine, "semitones", 0.0)) < 1e-6
+                            and abs(getattr(engine, "formant", 0.0)) < 1e-6)
+                    if quiet or idle:
+                        code = 3  # 不变（环境音/无变调参数）
+                    else:
+                        t0 = time.perf_counter()
+                        proc = engine.process(blk)
+                        dt = (time.perf_counter() - t0) * 1000.0
+                        with _stat_lock:
+                            stat["proc_ms"] = (stat["proc_ms"] * 0.85 + dt * 0.15) if stat["proc_ms"] > 0 else dt
             except Exception:
                 proc = blk
+                code = 1  # 失败
+            try:
+                r2 = float(np.sqrt(float(np.mean(np.asarray(proc, dtype=np.float32) ** 2))))
+                with _stat_lock:
+                    stat["out_rms"] = stat["out_rms"] * 0.7 + r2 * 0.3
+            except Exception:
+                pass
+            if record:
+                with _stat_lock:
+                    if code == 0:
+                        stat["ok"] += 1
+                    elif code == 1:
+                        stat["fail"] += 1
+                    else:
+                        stat["same"] += 1
+                    stat["pending"].append(code)
             out_ring = np.concatenate([out_ring, np.asarray(proc, dtype=np.float32)])
         if len(out_ring) >= need:
             outdata[:, 0] = out_ring[:need]
@@ -395,9 +678,114 @@ def _run_config(cfg_path: str) -> int:
                     pass
             elif cmd == "preset":
                 emit({"type": "log", "msg": "preset=%s（实时 DSP 变调下仅记录）" % obj.get("id", "")})
+            elif cmd == "priority":
+                try:
+                    v = int(obj.get("value", 0x20))
+                    import ctypes
+                    k32 = ctypes.windll.kernel32
+                    k32.GetCurrentProcess.restype = ctypes.c_void_p
+                    k32.SetPriorityClass.argtypes = [ctypes.c_void_p, ctypes.c_uint32]
+                    k32.SetPriorityClass(k32.GetCurrentProcess(), v)
+                    k32.GetPriorityClass.argtypes = [ctypes.c_void_p]
+                    k32.GetPriorityClass.restype = ctypes.c_uint32
+                    cls = int(k32.GetPriorityClass(k32.GetCurrentProcess()))
+                    emit({"type": "prio", "priority": {0x100: "实时", 0x80: "高", 0x8000: "偏高", 0x20: "正常", 0x4000: "偏低", 0x40: "低"}.get(cls, "正常")})
+                except Exception:
+                    pass
 
     t = threading.Thread(target=stdin_loop, daemon=True)
     t.start()
+
+    # RVC 串行转换线程（队列里的段落逐个转换）
+    if rvc_vc is not None:
+        t_conv = threading.Thread(target=_convert_loop, daemon=True)
+        t_conv.start()
+
+    # ── 扩展面板数据线程：48 段频谱 + 块状态 + 指标，约 20Hz ──
+    def spec_of(blk):
+        n = int(len(blk))
+        if n < 64:
+            return None
+        win = np.hanning(n).astype(np.float32)
+        sp = np.abs(np.fft.rfft(blk.astype(np.float32) * win))
+        freqs = np.fft.rfftfreq(n, 1.0 / max(1, use_sr_in))
+        hi = min(12000.0, use_sr_in / 2.0 - 1.0)
+        edges = np.geomspace(60.0, max(hi, 120.0), 7)  # 6 条频率线（1 主声 + 5 副声）
+        bins = []
+        for i in range(6):
+            lo, h2 = edges[i], edges[i + 1]
+            m = (freqs >= lo) & (freqs < h2)
+            v = float(sp[m].max()) if m.any() else 0.0
+            # 幅度 → dB → 0..100（-60dB 为 0，0dB 为 100）
+            db = 20.0 * np.log10(v / max(1e-9, n * 0.5) + 1e-9)
+            bins.append(max(0.0, min(100.0, (db + 60.0) / 60.0 * 100.0)))
+        return bins
+
+    def prio_name():
+        try:
+            import ctypes
+            k32 = ctypes.windll.kernel32
+            k32.GetCurrentProcess.restype = ctypes.c_void_p
+            k32.GetPriorityClass.argtypes = [ctypes.c_void_p]
+            k32.GetPriorityClass.restype = ctypes.c_uint32
+            cls = int(k32.GetPriorityClass(k32.GetCurrentProcess()))
+            return {0x100: "实时", 0x80: "高", 0x8000: "偏高", 0x20: "正常",
+                    0x4000: "偏低", 0x40: "低"}.get(cls, "正常")
+        except Exception:
+            return "正常"
+
+    def stat_loop():
+        last_bins = [0.0] * 48
+        while not stop_flag.is_set():
+            time.sleep(0.05)
+            try:
+                blk = spec_q.get_nowait()
+            except queue.Empty:
+                blk = None
+            if blk is not None:
+                try:
+                    b = spec_of(blk)
+                    if b:
+                        last_bins = b
+                except Exception:
+                    pass
+            with _stat_lock:
+                codes = list(stat["pending"])
+                stat["pending"].clear()
+                ok, fail, drop, same = stat["ok"], stat["fail"], stat["drop"], stat["same"]
+                proc = stat["proc_ms"]
+                cin = stat["in_rms"]
+                cout = stat["out_rms"]
+            total = ok + fail + same
+            conv = (ok / total * 100.0) if total else 0.0
+            block_ms = (block / max(1, use_sr_in)) * 1000.0
+            load = min(999.0, (proc / block_ms) * 100.0) if block_ms > 0 else 0.0
+            # 稳定性：按当前负面占比计算，指数平滑——后面正常会自动回正到 100
+            neg = drop + fail
+            alln = total + drop
+            inst = 100.0 if alln <= 0 else max(0.0, 100.0 - (neg / alln) * 100.0)
+            with _stat_lock:
+                stat["stability"] = stat["stability"] * 0.8 + inst * 0.2
+                stability = stat["stability"]
+            status = "异常" if (fail > 3 and total > 0 and fail * 10 > total) else ("过载" if load > 85 else "正常")
+            with _stat_lock:
+                played = stat.get("played_out", 0)
+            emit({
+                "type": "rt-stat",
+                "bins": [round(x, 1) for x in last_bins],
+                "in": round(cin, 4), "out": round(cout, 4),
+                "codes": codes, "ok": ok, "fail": fail, "drop": drop, "same": same,
+                "lat": round(proc, 1),
+                "conv": round(conv, 1),
+                "load": round(load, 1),
+                "stability": round(stability, 1),
+                "status": status,
+                "priority": prio_name(),
+                "played": round(played / max(1, use_sr_out), 1),
+            })
+
+    t2 = threading.Thread(target=stat_loop, daemon=True)
+    t2.start()
 
     # 每秒汇报一次电平，让界面有反馈
     try:

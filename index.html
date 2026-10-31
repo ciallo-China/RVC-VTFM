@@ -11,7 +11,14 @@
   /* ── 背景层 ── */
   #bgImage { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; display: none; }
   #bgVideo { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover; z-index: 0; display: none; }
-  #app { position: relative; z-index: 1; display: flex; flex-direction: column; height: 100%; }
+  #app { position: relative; z-index: 1; display: flex; flex-direction: column; flex: 1; min-height: 0; }
+  /* 自定义标题栏 */
+  #titlebar { flex: 0 0 30px; display: flex; align-items: center; background: #f7f9fc; border-bottom: 1px solid #e6eaf4; z-index: 1200; -webkit-app-region: drag; user-select: none; }
+  .tb-t { color: #556; font-size: 11.5px; letter-spacing: .5px; padding-left: 12px; }
+  .tb-b { margin-left: auto; display: flex; height: 100%; -webkit-app-region: no-drag; }
+  .tb-b button { width: 42px; height: 100%; border: none; background: transparent; color: #667; font-size: 12px; cursor: pointer; line-height: 1; }
+  .tb-b button:hover { background: #e8ecf8; }
+  #tbClose:hover { background: #e81123 !important; color: #fff; }
   /* 壁纸模式：面板背景透明度（alpha = 1 - 透明度），只改背景不动文字图标 */
 body.bg-on .panel { background: rgba(255,255,255,.20); }                  /* 选择声线 透明80% */
 body.bg-on #left > .panel:nth-child(2) { background: rgba(255,255,255,.20); }  /* 参数 透明80% */
@@ -47,7 +54,7 @@ body.bg-on #sfRam, body.bg-on #sfCpu, body.bg-on #sfDisk { transition: width .1s
   .hbtn { background: rgba(255,255,255,.2); border: none; color: #fff; border-radius: 9px; padding: 6px 12px; cursor: pointer; font-size: 12px; transition: .15s; }
   .hbtn:hover { background: rgba(255,255,255,.35); }
 
-  #layout { flex: 1; display: flex; gap: 14px; padding: 14px 16px; min-height: 0; }
+  #layout { flex: 1; display: flex; gap: 14px; padding: 14px 16px; min-height: 0; animation: rtIn .32s cubic-bezier(.22,.61,.36,1); }
   #left { width: 350px; display: flex; flex-direction: column; gap: 10px; min-height: 0; overflow-y: auto; }
   .panel { background: #fff; border-radius: 14px; box-shadow: 0 2px 10px rgba(70,80,140,.08); padding: 12px; }
   .anim .panel { animation: slideIn .35s ease; }
@@ -68,7 +75,7 @@ body.bg-on #sfRam, body.bg-on #sfCpu, body.bg-on #sfDisk { transition: width .1s
   /* ── 实时变声界面 ── */
   #rtPanel { display:none; flex:1; flex-direction:column; gap:10px; overflow-y:auto; padding:14px 16px; animation:rtIn .32s cubic-bezier(.22,.61,.36,1); }
   @keyframes rtIn { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:none; } }
-  body.rt-on #app > *:not(header):not(#rtPanel):not(#morePanel):not(.overlay):not(#toast) { display:none !important; }
+  body.rt-on #app > *:not(header):not(#rtPanel):not(#morePanel):not(#rtExtBar):not(.overlay):not(#toast) { display:none !important; }
   body.rt-on #rtPanel { display:flex; }
   .rt-log { flex:1; overflow-y:auto; background:transparent; padding:10px 12px; font-family:Consolas,monospace; font-size:12px; color:#cdd2e0; min-height:90px; user-select:text; white-space:pre-wrap; }
   #rtParams { display:flex; gap:18px; flex-wrap:wrap; align-items:center; }
@@ -230,21 +237,34 @@ body.bg-on #sfRam, body.bg-on #sfCpu, body.bg-on #sfDisk { transition: width .1s
 </style>
 </head>
 <body data-theme="pink">
+<div id="titlebar">
+  <div class="tb-t">RVC 声线转音</div>
+  <div class="tb-b">
+    <button id="tbMin" title="最小化">─</button>
+    <button id="tbMax" title="最大化/还原">▢</button>
+    <button id="tbClose" title="关闭">✕</button>
+  </div>
+</div>
 <img id="bgImage" style="display:none">
 <video id="bgVideo" autoplay loop playsinline></video>
 <div id="app">
 <header>
   <div class="logo">🎤</div>
-  <h1>RVC 声线转音</h1>
-  <button class="hbtn" id="rtSwitch" onclick="toggleRealtime()" title="点击切换实时转音界面" style="padding:5px 7px;display:flex;align-items:center">
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <div style="display:flex;flex-direction:column;gap:2px;align-items:flex-start">
+    <h1>RVC 声线转音</h1>
+    <div class="ver" style="display:flex;gap:5px;align-items:center;line-height:1.3">
+      <span id="verTag"></span>
+      <span>正式版</span>
+    </div>
+  </div>
+  <button class="hbtn" id="rtSwitch" onclick="toggleRealtime()" title="点击切换实时转音界面" style="padding:7px 13px;display:flex;align-items:center;gap:6px">
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
       <rect x="2.5" y="5.5" width="19" height="13" rx="2.6"></rect>
       <line x1="15.5" y1="5.5" x2="15.5" y2="18.5"></line>
       <line x1="2.5" y1="14.5" x2="15.5" y2="14.5"></line>
     </svg>
+    <span id="rtSwitchHint" style="color:rgba(255,255,255,.88);font-size:12px;white-space:nowrap;line-height:1">切换变音界面</span>
   </button>
-  <span class="ver" id="verTag"></span>
-  <span style="color:rgba(255,255,255,.85);font-size:11px">蔚蓝档案声线 · 视频配音好帮手</span>
   <div class="status"><span class="dot" id="stDot"></span><span id="stText">检测引擎…</span></div>
   <button class="hbtn" id="themeBtn">🎨</button>
   <button class="hbtn" id="plazaBtn" onclick="openPlaza()">🏪 广场</button>
@@ -260,11 +280,12 @@ body.bg-on #sfRam, body.bg-on #sfCpu, body.bg-on #sfDisk { transition: width .1s
           <div class="param"><label title="男声转女声 +12，女声转男声 −12">音调（半音）</label><input id="rtPitch" type="number" value="0"></div>
           <div class="param"><label title="改变音色共鸣（共振峰）：正数更细亮，负数更低沉">共鸣（共振峰）</label><input id="rtFormant" type="number" step="0.1" value="0"></div>
           <div class="param"><label>相似度</label><input id="rtRate" type="number" step="0.05" value="0.75"></div>
-          <div class="param"><label>输出增益</label><input id="rtGain" type="number" step="0.05" value="1"></div>
+          <div class="param"><label title="RVC：声线模型推理（质量好但慢）；DSP：变调+共振峰（快、干净、无模型音色）">变音算法</label><select id="rtMode"><option value="rvc" selected>RVC（声线模型）</option><option value="dsp">DSP（变调·快）</option></select></div>
           <div class="param"><label>采样率</label><select id="rtSr"><option value="48000">48000 Hz</option><option value="44100">44100 Hz</option></select></div>
-          <div class="param"><label>块大小</label><select id="rtBlock"><option value="512">512</option><option value="1024" selected>1024</option><option value="2048">2048</option></select></div>
-          <div class="param"><label>音高算法</label><select id="rtF0"><option value="pm">pm（极速省内存）</option><option value="harvest">harvest（轻量）</option><option value="crepe">crepe（较准）</option><option value="rmvpe">rmvpe（最准）</option></select></div>
+          <div class="param"><label>块大小</label><select id="rtBlock"><option value="512">512</option><option value="1024" selected>1024</option><option value="2048">2048</option><option value="4096">4096</option><option value="8192">8192</option></select></div>
+          <div class="param"><label>音高算法</label><select id="rtF0"><option value="pm">pm（极速省内存）</option><option value="harvest" selected>harvest（轻量·较准）</option><option value="crepe">crepe（较准）</option><option value="rmvpe">rmvpe（最准·慢）</option></select></div>
           <div class="param"><label>CPU 线程</label><select id="rtTh"><option value="auto">auto（自动）</option><option value="1" selected>1（省内存）</option><option value="2">2</option><option value="4">4</option><option value="8">8</option><option value="16">16</option><option value="32">32</option><option value="64">64</option><option value="128">128</option></select></div>
+          <div class="param"><label title="实时推理=边收边转（快但糊）；队列推理=按停顿切整句（质量好但慢）；时间推理=每 N 秒切一段">推理类型</label><select id="rtInferType" style="flex:1;padding:6px 8px;border:1px solid #d3dbf0;border-radius:8px;background:#fff;color:#556;cursor:pointer;font-size:12px"><option value="realtime">实时推理</option><option value="queue" selected>队列推理</option><option value="time">时间推理</option></select></div>
         </div>
       </div>
       <div id="rtSysSlot" style="flex-shrink:0"></div>
@@ -303,7 +324,73 @@ body.bg-on #sfRam, body.bg-on #sfCpu, body.bg-on #sfDisk { transition: width .1s
     </div>
   </div>
 </div>
+<div id="rtExtBar">
+  <button id="rtExtBtn" title="展开/收起扩展面板">◀</button>
+  <div id="rtExtPanel">
+    <div class="ext-sec">
+      <div class="ext-t">声线频率</div>
+      <canvas id="specCanvas" width="216" height="120"></canvas>
+    </div>
+    <div class="ext-sec">
+      <div class="ext-t">块状态</div>
+      <canvas id="blkCanvas" width="216" height="96"></canvas>
+      <div class="ext-legend">
+        <span><i class="lg lg-ok"></i>成功</span>
+        <span><i class="lg lg-fail"></i>失败</span>
+        <span><i class="lg lg-drop"></i>丢失</span>
+        <span><i class="lg lg-same"></i>不变</span>
+      </div>
+    </div>
+    <div class="ext-sec">
+      <div class="ext-t">数据</div>
+      <div class="ext-data">
+        <div><span>延迟</span><b id="exLat">—</b></div>
+        <div><span>转换率</span><b id="exConv">—</b></div>
+        <div><span>负载</span><b id="exLoad">—</b></div>
+        <div><span>稳定性</span><b id="exStab">—</b></div>
+        <div><span>状态</span><b id="exStatus">—</b></div>
+        <div id="exPrioRow" style="cursor:pointer" title="点击设置变音进程优先级"><span>优先级</span><span style="display:flex;align-items:center;gap:2px"><b id="exPrio">正常</b><i style="font-size:9px;color:#889;font-style:normal">▼</i></span></div>
+      </div>
+    </div>
+    <div class="ext-sec" style="flex:1;display:flex;flex-direction:column;min-height:150px;overflow:hidden">
+      <div class="ext-t">调试日志</div>
+      <div id="dbgLog"></div>
+    </div>
+  </div>
+</div>
 <style>
+/* ── 右侧扩展侧栏（覆盖式，标题栏 + 顶栏下方） ── */
+#rtExtBar { position:fixed; right:0; top:90px; bottom:0; display:flex; z-index:850; pointer-events:none; }
+#rtExtBtn { width:22px; border:1px solid #c9d4ee; border-right:none; background:#fff; color:#667; cursor:pointer; font-size:12px; padding:0; flex:0 0 auto; pointer-events:auto; transition:color .2s,background .2s; }
+#rtExtBtn:hover { background:#f0f4ff; color:var(--ac); }
+#rtExtPanel { order:-1; width:240px; background:#f2f5fc; border-left:1px solid #c9d4ee; display:flex; flex-direction:column; gap:8px; padding:10px; overflow-y:auto; transform:translateX(100%); opacity:0; pointer-events:none; transition:transform .32s cubic-bezier(.22,.61,.36,1), opacity .25s ease; box-shadow:-8px 0 24px rgba(70,80,140,.12); }
+body.ext-open #rtExtPanel { transform:translateX(0); opacity:1; pointer-events:auto; }
+.ext-sec { background:#fff; border:1.5px solid #b9c6e8; border-radius:14px; padding:10px 12px; box-shadow:0 2px 6px rgba(70,80,140,.10); }
+.ext-t { font-size:12.5px; font-weight:700; color:#445; margin-bottom:8px; }
+#specCanvas { display:block; width:100%; height:120px; background:#fff; border:1px solid #cfd8f0; border-radius:8px; }
+#blkCanvas { display:block; width:100%; background:#fff; border:1px solid #cfd8f0; border-radius:8px; }
+.ext-legend { display:flex; gap:10px; flex-wrap:wrap; margin-top:7px; font-size:11px; color:#778; }
+.ext-legend span { display:flex; align-items:center; gap:4px; }
+.lg { display:inline-block; width:10px; height:10px; border-radius:3px; border:1px solid #b9c6e8; }
+.lg-ok { background:#3ecf7a; }
+.lg-fail { background:#e25b6e; }
+.lg-drop { background:#8a90a3; }
+.lg-same { background:#ffffff; }
+.ext-data { display:grid; grid-template-columns:1fr 1fr; gap:6px; font-size:12px; }
+.ext-data div { display:flex; flex-direction:column; gap:2px; color:#8a93a8; background:#f6f8fe; border:1px solid #e3e9f7; border-radius:9px; padding:5px 8px; }
+.ext-data b { color:#2f3850; font-weight:600; font-size:12.5px; }
+#dbgLog { flex:1; min-height:0; overflow-y:auto; background:#171b26; color:#cdd2e0; font-family:Consolas,monospace; font-size:10.5px; line-height:1.55; border-radius:8px; padding:7px 9px; user-select:text; white-space:pre-wrap; word-break:break-all; }
+.dbg-line { color:#cdd2e0; }
+.dbg-err { color:#ff9a9a; }
+.dbg-warn { color:#ffd98a; }
+.dbg-ok { color:#8fe0a8; }
+.dbg-in { color:#9fc3ff; }
+/* 运行日志 / 调试日志：上下滚动条黑色 80% 透明 */
+#log::-webkit-scrollbar, #rtLog::-webkit-scrollbar, #dbgLog::-webkit-scrollbar { width: 8px; }
+#log::-webkit-scrollbar-track, #rtLog::-webkit-scrollbar-track, #dbgLog::-webkit-scrollbar-track { background: transparent; }
+#log::-webkit-scrollbar-thumb, #rtLog::-webkit-scrollbar-thumb, #dbgLog::-webkit-scrollbar-thumb { background: rgba(0,0,0,.8); border-radius: 4px; }
+#log::-webkit-scrollbar-thumb:hover, #rtLog::-webkit-scrollbar-thumb:hover, #dbgLog::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,.95); }
+
 .mitem{padding:7px 9px;border-radius:8px;cursor:pointer;color:#556;font-size:12px;white-space:nowrap}
 .mitem:hover{background:#e8ecf8}
 .mitem.act{background:#fff;color:var(--ac);font-weight:600;box-shadow:0 1px 4px rgba(70,80,140,.10)}
@@ -335,7 +422,7 @@ body.bg-on #sfRam, body.bg-on #sfCpu, body.bg-on #sfDisk { transition: width .1s
 .mbtn.spark{animation:sparkle .32s ease-out}
 .c2048{aspect-ratio:1;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:16px;border-radius:7px;color:#2b3a66;min-width:0}
 </style>
-<div id="morePanel" style="display:none;position:fixed;top:64px;right:18px;width:600px;height:452px;background:#fff;border-radius:14px;box-shadow:0 12px 40px rgba(40,50,100,.24);z-index:900;font-size:12px;overflow:hidden">
+<div id="morePanel" style="display:none;position:fixed;top:90px;right:18px;width:600px;height:452px;background:#fff;border-radius:14px;box-shadow:0 12px 40px rgba(40,50,100,.24);z-index:900;font-size:12px;overflow:hidden">
   <div style="display:flex;height:100%">
     <div style="width:132px;background:#f4f6fc;padding:8px;display:flex;flex-direction:column;gap:2px;flex-shrink:0">
       <div style="font-weight:600;color:#aab;padding:6px 8px 2px;font-size:11px">百宝箱</div>
@@ -451,8 +538,11 @@ body.bg-on #sfRam, body.bg-on #sfCpu, body.bg-on #sfDisk { transition: width .1s
             <div style="color:#889;margin-top:10px">抖音号：</div>
             <div id="authorList" style="margin-top:9px;display:flex;flex-direction:column;gap:8px"></div>
             <div style="display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:12px;border-top:1px dashed #e6eaf4;padding-top:10px">
-              <span style="color:#889;font-style:italic;font-size:12px">洛安开源社区QQ：1020835327</span>
+              <span style="color:#889;font-style:italic;font-size:12px">洛安开源社区QQ：1130474363</span>
               <span style="color:#889;font-style:italic;font-size:12px">社区作者QQ：1274261394</span>
+            </div>
+            <div style="margin-top:12px">
+              <button class="mbtn fbtn" id="communityBtn">开源社区</button>
             </div>
           </div>
         </div>
@@ -546,7 +636,157 @@ body.bg-on #sfRam, body.bg-on #sfCpu, body.bg-on #sfDisk { transition: width .1s
 
 <script>
 const $ = (id) => document.getElementById(id);
-const VERSION = '2.6.02.100';
+const VERSION = '2.7.00.00';
+
+// ── 界面语言（i18n）：key 为界面上的中文原文，按文本节点整句替换 ──
+const I18N = {
+  en: {
+    '选择声线': 'Voice', '参数': 'Parameters', '音频设备': 'Audio Devices', '运行日志': 'Log', '系统状态': 'System',
+    '引擎就绪': 'Engine Ready', '广场': 'Plaza', '更多': 'More', '设置': 'Settings',
+    '音调（半音）': 'Pitch (semitones)', '相似度': 'Similarity', '保护': 'Protect', '音高算法': 'Pitch Algorithm',
+    'CPU 线程': 'CPU Threads', '输出格式': 'Output Format', '共鸣（共振峰）': 'Formant', '输出增益': 'Output Gain',
+    '采样率': 'Sample Rate', '块大小': 'Block Size',
+    '开始转音': 'Start Convert', '结束转音': 'Stop Convert', '开始变音': 'Start Voice', '停止变音': 'Stop Voice',
+    '开始录音': 'Record', '播放录音': 'Play Recording',
+    '内存 (RAM)': 'Memory (RAM)', '处理器 (CPU)': 'CPU', '硬盘 (SSD)': 'Disk (SSD)',
+    '工具箱': 'Toolbox', '软件诊断': 'Diagnostics', '日志记录': 'Logs', '原作者': 'Author', '反馈': 'Feedback', '小游戏': 'Games',
+    '内存优化': 'Optimize RAM', '清理垃圾': 'Clean Junk', '拖入音频文件': 'Drop audio files', '点击选择': 'Click to select',
+    '清空输入': 'Clear Input', '输入': 'Input', '输出': 'Output', '未运行': 'Idle',
+  },
+  ja: {
+    '选择声线': 'ボイス選択', '参数': 'パラメータ', '音频设备': 'オーディオデバイス', '运行日志': 'ログ', '系统状态': 'システム',
+    '引擎就绪': 'エンジン準備完了', '广场': 'プラザ', '更多': 'その他', '设置': '設定',
+    '音调（半音）': 'ピッチ（半音）', '相似度': '類似度', '保护': '保護', '音高算法': 'ピッチアルゴリズム',
+    'CPU 线程': 'CPU スレッド', '输出格式': '出力形式', '共鸣（共振峰）': 'フォルマント', '输出增益': '出力ゲイン',
+    '采样率': 'サンプルレート', '块大小': 'ブロックサイズ',
+    '开始转音': '変換開始', '结束转音': '変換終了', '开始变音': '変声開始', '停止变音': '変声停止',
+    '开始录音': '録音開始', '播放录音': '録音再生',
+    '内存 (RAM)': 'メモリ (RAM)', '处理器 (CPU)': 'CPU', '硬盘 (SSD)': 'ディスク (SSD)',
+    '工具箱': 'ツールボックス', '软件诊断': '診断', '日志记录': 'ログ記録', '原作者': '原作者', '反馈': 'フィードバック', '小游戏': 'ミニゲーム',
+    '内存优化': 'メモリ最適化', '清理垃圾': 'ゴミ掃除', '拖入音频文件': '音声ファイルをドロップ', '点击选择': 'クリックして選択',
+    '清空输入': '入力をクリア', '输入': '入力', '输出': '出力', '未运行': '停止中',
+  },
+  ko: {
+    '选择声线': '음성 선택', '参数': '매개변수', '音频设备': '오디오 장치', '运行日志': '로그', '系统状态': '시스템',
+    '引擎就绪': '엔진 준비됨', '广场': '광장', '更多': '더보기', '设置': '설정',
+    '音调（半音）': '음높이 (반음)', '相似度': '유사도', '保护': '보호', '音高算法': '음높이 알고리즘',
+    'CPU 线程': 'CPU 스레드', '输出格式': '출력 형식', '共鸣（共振峰）': '포먼트', '输出增益': '출력 게인',
+    '采样率': '샘플레이트', '块大小': '블록 크기',
+    '开始转音': '변환 시작', '结束转音': '변환 종료', '开始变音': '변성 시작', '停止变音': '변성 중지',
+    '开始录音': '녹음 시작', '播放录音': '녹음 재생',
+    '内存 (RAM)': '메모리 (RAM)', '处理器 (CPU)': 'CPU', '硬盘 (SSD)': '디스크 (SSD)',
+    '工具箱': '도구 상자', '软件诊断': '진단', '日志记录': '로그 기록', '原作者': '원작자', '反馈': '피드백', '小游戏': '미니게임',
+    '内存优化': '메모리 최적화', '清理垃圾': '정리', '拖入音频文件': '오디오 파일을 드롭', '点击选择': '클릭하여 선택',
+    '清空输入': '입력 비우기', '输入': '입력', '输出': '출력', '未运行': '대기 중',
+  },
+  fr: {
+    '选择声线': 'Voix', '参数': 'Paramètres', '音频设备': 'Périphériques audio', '运行日志': 'Journal', '系统状态': 'Système',
+    '引擎就绪': 'Moteur prêt', '广场': 'Place', '更多': 'Plus', '设置': 'Réglages',
+    '音调（半音）': 'Tonalité (demi-tons)', '相似度': 'Similarité', '保护': 'Protection', '音高算法': 'Algorithme de hauteur',
+    'CPU 线程': 'Threads CPU', '输出格式': 'Format de sortie', '共鸣（共振峰）': 'Formant', '输出增益': 'Gain de sortie',
+    '采样率': 'Fréquence', '块大小': 'Taille de bloc',
+    '开始转音': 'Démarrer', '结束转音': 'Arrêter', '开始变音': 'Démarrer la voix', '停止变音': 'Arrêter la voix',
+    '开始录音': 'Enregistrer', '播放录音': 'Lire',
+    '内存 (RAM)': 'Mémoire (RAM)', '处理器 (CPU)': 'CPU', '硬盘 (SSD)': 'Disque (SSD)',
+    '工具箱': 'Boîte à outils', '软件诊断': 'Diagnostic', '日志记录': 'Journaux', '原作者': 'Auteur', '反馈': 'Avis', '小游戏': 'Jeux',
+    '内存优化': 'Optimiser la RAM', '清理垃圾': 'Nettoyer', '拖入音频文件': 'Déposez des fichiers audio', '点击选择': 'Cliquer pour choisir',
+    '清空输入': "Vider l'entrée", '输入': 'Entrée', '输出': 'Sortie', '未运行': 'Inactif',
+  },
+  de: {
+    '选择声线': 'Stimme', '参数': 'Parameter', '音频设备': 'Audiogeräte', '运行日志': 'Protokoll', '系统状态': 'System',
+    '引擎就绪': 'Engine bereit', '广场': 'Platz', '更多': 'Mehr', '设置': 'Einstellungen',
+    '音调（半音）': 'Tonhöhe (Halbtöne)', '相似度': 'Ähnlichkeit', '保护': 'Schutz', '音高算法': 'Tonhöhen-Algorithmus',
+    'CPU 线程': 'CPU-Threads', '输出格式': 'Ausgabeformat', '共鸣（共振峰）': 'Formant', '输出增益': 'Ausgangsverstärkung',
+    '采样率': 'Abtastrate', '块大小': 'Blockgröße',
+    '开始转音': 'Starten', '结束转音': 'Beenden', '开始变音': 'Stimme starten', '停止变音': 'Stimme stoppen',
+    '开始录音': 'Aufnehmen', '播放录音': 'Aufnahme abspielen',
+    '内存 (RAM)': 'Speicher (RAM)', '处理器 (CPU)': 'CPU', '硬盘 (SSD)': 'Datenträger (SSD)',
+    '工具箱': 'Werkzeuge', '软件诊断': 'Diagnose', '日志记录': 'Protokolle', '原作者': 'Autor', '反馈': 'Feedback', '小游戏': 'Spiele',
+    '内存优化': 'RAM optimieren', '清理垃圾': 'Bereinigen', '拖入音频文件': 'Audiodateien ablegen', '点击选择': 'Klicken zum Auswählen',
+    '清空输入': 'Eingabe leeren', '输入': 'Eingang', '输出': 'Ausgang', '未运行': 'Inaktiv',
+  },
+  es: {
+    '选择声线': 'Voz', '参数': 'Parámetros', '音频设备': 'Dispositivos de audio', '运行日志': 'Registro', '系统状态': 'Sistema',
+    '引擎就绪': 'Motor listo', '广场': 'Plaza', '更多': 'Más', '设置': 'Ajustes',
+    '音调（半音）': 'Tono (semitonos)', '相似度': 'Similitud', '保护': 'Protección', '音高算法': 'Algoritmo de tono',
+    'CPU 线程': 'Hilos de CPU', '输出格式': 'Formato de salida', '共鸣（共振峰）': 'Formante', '输出增益': 'Ganancia de salida',
+    '采样率': 'Frecuencia', '块大小': 'Tamaño de bloque',
+    '开始转音': 'Iniciar', '结束转音': 'Detener', '开始变音': 'Iniciar voz', '停止变音': 'Detener voz',
+    '开始录音': 'Grabar', '播放录音': 'Reproducir',
+    '内存 (RAM)': 'Memoria (RAM)', '处理器 (CPU)': 'CPU', '硬盘 (SSD)': 'Disco (SSD)',
+    '工具箱': 'Herramientas', '软件诊断': 'Diagnóstico', '日志记录': 'Registros', '原作者': 'Autor', '反馈': 'Comentarios', '小游戏': 'Juegos',
+    '内存优化': 'Optimizar RAM', '清理垃圾': 'Limpiar', '拖入音频文件': 'Arrastra archivos de audio', '点击选择': 'Haz clic para elegir',
+    '清空输入': 'Vaciar entrada', '输入': 'Entrada', '输出': 'Salida', '未运行': 'Inactivo',
+  },
+  ru: {
+    '选择声线': 'Голос', '参数': 'Параметры', '音频设备': 'Аудиоустройства', '运行日志': 'Журнал', '系统状态': 'Система',
+    '引擎就绪': 'Движок готов', '广场': 'Площадь', '更多': 'Ещё', '设置': 'Настройки',
+    '音调（半音）': 'Тон (полутоны)', '相似度': 'Сходство', '保护': 'Защита', '音高算法': 'Алгоритм тона',
+    'CPU 线程': 'Потоки CPU', '输出格式': 'Формат вывода', '共鸣（共振峰）': 'Форманта', '输出增益': 'Усиление выхода',
+    '采样率': 'Частота', '块大小': 'Размер блока',
+    '开始转音': 'Старт', '结束转音': 'Стоп', '开始变音': 'Старт голоса', '停止变音': 'Стоп голоса',
+    '开始录音': 'Запись', '播放录音': 'Воспроизвести',
+    '内存 (RAM)': 'Память (RAM)', '处理器 (CPU)': 'CPU', '硬盘 (SSD)': 'Диск (SSD)',
+    '工具箱': 'Инструменты', '软件诊断': 'Диагностика', '日志记录': 'Журналы', '原作者': 'Автор', '反馈': 'Отзыв', '小游戏': 'Игры',
+    '内存优化': 'Оптимизировать RAM', '清理垃圾': 'Очистить', '拖入音频文件': 'Перетащите аудио', '点击选择': 'Нажмите для выбора',
+    '清空输入': 'Очистить вход', '输入': 'Вход', '输出': 'Выход', '未运行': 'Неактивно',
+  },
+  pt: {
+    '选择声线': 'Voz', '参数': 'Parâmetros', '音频设备': 'Dispositivos de áudio', '运行日志': 'Log', '系统状态': 'Sistema',
+    '引擎就绪': 'Motor pronto', '广场': 'Praça', '更多': 'Mais', '设置': 'Configurações',
+    '音调（半音）': 'Tom (semitons)', '相似度': 'Similaridade', '保护': 'Proteção', '音高算法': 'Algoritmo de tom',
+    'CPU 线程': 'Threads de CPU', '输出格式': 'Formato de saída', '共鸣（共振峰）': 'Formante', '输出增益': 'Ganho de saída',
+    '采样率': 'Taxa de amostragem', '块大小': 'Tamanho do bloco',
+    '开始转音': 'Iniciar', '结束转音': 'Parar', '开始变音': 'Iniciar voz', '停止变音': 'Parar voz',
+    '开始录音': 'Gravar', '播放录音': 'Reproduzir',
+    '内存 (RAM)': 'Memória (RAM)', '处理器 (CPU)': 'CPU', '硬盘 (SSD)': 'Disco (SSD)',
+    '工具箱': 'Ferramentas', '软件诊断': 'Diagnóstico', '日志记录': 'Logs', '原作者': 'Autor', '反馈': 'Feedback', '小游戏': 'Jogos',
+    '内存优化': 'Otimizar RAM', '清理垃圾': 'Limpar', '拖入音频文件': 'Arraste arquivos de áudio', '点击选择': 'Clique para escolher',
+    '清空输入': 'Limpar entrada', '输入': 'Entrada', '输出': 'Saída', '未运行': 'Inativo',
+  },
+  ar: {
+    '选择声线': 'الصوت', '参数': 'المعلمات', '音频设备': 'أجهزة الصوت', '运行日志': 'السجل', '系统状态': 'النظام',
+    '引擎就绪': 'المحرك جاهز', '广场': 'الساحة', '更多': 'المزيد', '设置': 'الإعدادات',
+    '音调（半音）': 'النغمة (نصف نغمة)', '相似度': 'التشابه', '保护': 'الحماية', '音高算法': 'خوارزمية النغمة',
+    'CPU 线程': 'خيوط المعالج', '输出格式': 'صيغة الإخراج', '共鸣（共振峰）': 'الفورمانت', '输出增益': 'كسب الإخراج',
+    '采样率': 'معدل العينات', '块大小': 'حجم الكتلة',
+    '开始转音': 'بدء التحويل', '结束转音': 'إيقاف التحويل', '开始变音': 'بدء تغيير الصوت', '停止变音': 'إيقاف تغيير الصوت',
+    '开始录音': 'بدء التسجيل', '播放录音': 'تشغيل التسجيل',
+    '内存 (RAM)': 'الذاكرة (RAM)', '处理器 (CPU)': 'المعالج (CPU)', '硬盘 (SSD)': 'القرص (SSD)',
+    '工具箱': 'الأدوات', '软件诊断': 'التشخيص', '日志记录': 'السجلات', '原作者': 'المؤلف', '反馈': 'التعليقات', '小游戏': 'ألعاب',
+    '内存优化': 'تحسين الذاكرة', '清理垃圾': 'تنظيف', '拖入音频文件': 'أفلت ملفات الصوت', '点击选择': 'انقر للاختيار',
+    '清空输入': 'إفراغ الإدخال', '输入': 'الإدخال', '输出': 'الإخراج', '未运行': 'غير نشط',
+  },
+};
+const i18nDone = new WeakSet();
+function applyI18n() {
+  try {
+    const lang = (state && state.settings && state.settings.lang) || 'zh';
+    if (lang === 'zh' || lang === 'mars') return;
+    const dict = I18N[lang];
+    if (!dict) return;
+    const tw = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
+    const nodes = [];
+    while (tw.nextNode()) nodes.push(tw.currentNode);
+    for (const n of nodes) {
+      if (i18nDone.has(n)) continue;
+      const raw = n.nodeValue;
+      if (!raw || !raw.trim()) continue;
+      const key = raw.trim();
+      if (!dict[key]) continue;
+      n.nodeValue = raw.replace(key, dict[key]);
+      i18nDone.add(n);
+    }
+  } catch (e) { }
+}
+try {
+  const _iob = new MutationObserver(() => {
+    clearTimeout(window._i18nT);
+    window._i18nT = setTimeout(applyI18n, 60);
+  });
+  _iob.observe(document.body, { childList: true, subtree: true });
+} catch (e) { }
+
 // 全局错误捕获：任何未处理异常都弹提示，避免“点了没反应又没报错”
 window.addEventListener('error', (ev) => {
   const m = (ev && ev.message) || '未知脚本错误';
@@ -711,6 +951,7 @@ async function refreshState() {
     } catch (e) { }
   }
   applySettings();
+  applyI18n();
   renderVoices();
   // 火星文界面：启动后把文字换成生僻字乱码
   if (state.settings && state.settings.lang === 'mars') setTimeout(() => { try { startMars(); } catch (e) { } }, 400);
@@ -723,7 +964,7 @@ async function refreshState() {
       const rc = (state.settings && state.settings.rtConfig) || {};
       if (rc.sampleRate) $('rtSr').value = String(rc.sampleRate);
       if (rc.blockSize) $('rtBlock').value = String(rc.blockSize);
-      if (rc.gain) { $('rtGain').value = String(rc.gain); }
+      if (rc.gain) { /* 输出增益已移除 */ }
       rtPresetId = (state.settings && state.settings.rtPreset) || '';
       rtRenderVoices();
       if (rc.f0upKey != null && $('rtPitch')) { $('rtPitch').value = String(rc.f0upKey); }
@@ -731,6 +972,11 @@ async function refreshState() {
       if (rc.formant != null && $('rtFormant')) { $('rtFormant').value = String(rc.formant); }
       if (rc.f0method && $('rtF0')) { $('rtF0').value = String(rc.f0method); }
       if (rc.torch_threads && $('rtTh')) { $('rtTh').value = String(rc.torch_threads); }
+      if (rc.inferType != null) { rtInferType = String(rc.inferType); }
+      if (rc.timeSec != null) { rtTimeSec = rc.timeSec; }
+      if (rc.priority != null) { rtPrioValue = rc.priority; rtExtSetMetric('exPrio', {0x100:'实时',0x80:'高',0x8000:'偏高',0x20:'正常',0x4000:'偏低',0x40:'低'}[rc.priority] || '正常'); }
+      if (rc.mode && $('rtMode')) { $('rtMode').value = String(rc.mode); }
+      rtInferTypeSyncUI();
       const wantName = (state.settings && state.settings.rtVoice) || '';
       if (wantName && state.voices) {
         const vi = state.voices.findIndex((x) => x.name === wantName);
@@ -771,7 +1017,7 @@ async function refreshVoices() {
       const rc = (state.settings && state.settings.rtConfig) || {};
       if (rc.sampleRate) $('rtSr').value = String(rc.sampleRate);
       if (rc.blockSize) $('rtBlock').value = String(rc.blockSize);
-      if (rc.gain) { $('rtGain').value = String(rc.gain); }
+      if (rc.gain) { /* 输出增益已移除 */ }
       rtPresetId = (state.settings && state.settings.rtPreset) || '';
       rtRenderVoices();
       if (rc.f0upKey != null && $('rtPitch')) { $('rtPitch').value = String(rc.f0upKey); }
@@ -779,6 +1025,11 @@ async function refreshVoices() {
       if (rc.formant != null && $('rtFormant')) { $('rtFormant').value = String(rc.formant); }
       if (rc.f0method && $('rtF0')) { $('rtF0').value = String(rc.f0method); }
       if (rc.torch_threads && $('rtTh')) { $('rtTh').value = String(rc.torch_threads); }
+      if (rc.inferType != null) { rtInferType = String(rc.inferType); }
+      if (rc.timeSec != null) { rtTimeSec = rc.timeSec; }
+      if (rc.priority != null) { rtPrioValue = rc.priority; rtExtSetMetric('exPrio', {0x100:'实时',0x80:'高',0x8000:'偏高',0x20:'正常',0x4000:'偏低',0x40:'低'}[rc.priority] || '正常'); }
+      if (rc.mode && $('rtMode')) { $('rtMode').value = String(rc.mode); }
+      rtInferTypeSyncUI();
       const wantName = (state.settings && state.settings.rtVoice) || '';
       if (wantName && state.voices) {
         const vi = state.voices.findIndex((x) => x.name === wantName);
@@ -860,7 +1111,7 @@ function renderVoices() {
       const rc = (state.settings && state.settings.rtConfig) || {};
       if (rc.sampleRate) $('rtSr').value = String(rc.sampleRate);
       if (rc.blockSize) $('rtBlock').value = String(rc.blockSize);
-      if (rc.gain) { $('rtGain').value = String(rc.gain); }
+      if (rc.gain) { /* 输出增益已移除 */ }
       rtPresetId = (state.settings && state.settings.rtPreset) || '';
       rtRenderVoices();
       if (rc.f0upKey != null && $('rtPitch')) { $('rtPitch').value = String(rc.f0upKey); }
@@ -868,6 +1119,11 @@ function renderVoices() {
       if (rc.formant != null && $('rtFormant')) { $('rtFormant').value = String(rc.formant); }
       if (rc.f0method && $('rtF0')) { $('rtF0').value = String(rc.f0method); }
       if (rc.torch_threads && $('rtTh')) { $('rtTh').value = String(rc.torch_threads); }
+      if (rc.inferType != null) { rtInferType = String(rc.inferType); }
+      if (rc.timeSec != null) { rtTimeSec = rc.timeSec; }
+      if (rc.priority != null) { rtPrioValue = rc.priority; rtExtSetMetric('exPrio', {0x100:'实时',0x80:'高',0x8000:'偏高',0x20:'正常',0x4000:'偏低',0x40:'低'}[rc.priority] || '正常'); }
+      if (rc.mode && $('rtMode')) { $('rtMode').value = String(rc.mode); }
+      rtInferTypeSyncUI();
       const wantName = (state.settings && state.settings.rtVoice) || '';
       if (wantName && state.voices) {
         const vi = state.voices.findIndex((x) => x.name === wantName);
@@ -901,7 +1157,7 @@ function renderVoices() {
       const rc = (state.settings && state.settings.rtConfig) || {};
       if (rc.sampleRate) $('rtSr').value = String(rc.sampleRate);
       if (rc.blockSize) $('rtBlock').value = String(rc.blockSize);
-      if (rc.gain) { $('rtGain').value = String(rc.gain); }
+      if (rc.gain) { /* 输出增益已移除 */ }
       rtPresetId = (state.settings && state.settings.rtPreset) || '';
       rtRenderVoices();
       if (rc.f0upKey != null && $('rtPitch')) { $('rtPitch').value = String(rc.f0upKey); }
@@ -909,6 +1165,11 @@ function renderVoices() {
       if (rc.formant != null && $('rtFormant')) { $('rtFormant').value = String(rc.formant); }
       if (rc.f0method && $('rtF0')) { $('rtF0').value = String(rc.f0method); }
       if (rc.torch_threads && $('rtTh')) { $('rtTh').value = String(rc.torch_threads); }
+      if (rc.inferType != null) { rtInferType = String(rc.inferType); }
+      if (rc.timeSec != null) { rtTimeSec = rc.timeSec; }
+      if (rc.priority != null) { rtPrioValue = rc.priority; rtExtSetMetric('exPrio', {0x100:'实时',0x80:'高',0x8000:'偏高',0x20:'正常',0x4000:'偏低',0x40:'低'}[rc.priority] || '正常'); }
+      if (rc.mode && $('rtMode')) { $('rtMode').value = String(rc.mode); }
+      rtInferTypeSyncUI();
       const wantName = (state.settings && state.settings.rtVoice) || '';
       if (wantName && state.voices) {
         const vi = state.voices.findIndex((x) => x.name === wantName);
@@ -1274,8 +1535,7 @@ function renderSettings(t) {
       '<div class="perf-cards" style="flex-wrap:wrap">' +
       langs.map((x) => '<div class="pcard' + (cur === x[0] ? ' sel' : '') + '" style="flex:0 0 30%;min-width:120px" onclick="setLang(\'' + x[0] + '\')"><b>' + x[1] + '</b></div>').join('') +
       '</div>' +
-      '<div class="hint">💡 界面与声线包语言一起切换；选择后自动重启软件生效。火星文会把界面文字变成乱码（整活用）。</div>' +
-      '<div style="font-size:11px;color:#aab;margin-top:6px">（暂未更新）</div>';
+      '<div class="hint">💡 界面与声线包语言一起切换；选择后自动重启软件生效。火星文会把界面文字变成乱码（整活用）。</div>';
     c.setAttribute('data-no-mars', '1');
   } else {
     c.innerHTML = '<span class="close-x" onclick="document.getElementById(\'ov-settings\').classList.remove(\'show\')">✕</span><h3>ℹ️ 关于</h3>' +
@@ -1470,6 +1730,8 @@ function rtSwitchLabel() {
   const on = document.body.classList.contains('rt-on');
   const b = $('rtSwitch');
   if (b) b.title = on ? '点击切换录音转音界面' : '点击切换实时转音界面';
+  const h = $('rtSwitchHint');
+  if (h) h.textContent = on ? '切换转音界面' : '切换变音界面';
 }
 // 系统状态面板随界面切换移动到正确容器（否则 rt-on 下会被 display:none 隐藏而"消失"）
 function moveSysPanel(toRt) {
@@ -1587,6 +1849,54 @@ async function rtLoadPresets() {
   if (first && !box.querySelector('.rt-pr.sel')) first.classList.add('sel');
   box.dataset.loaded = '1';
 }
+// 推理类型（仅实时变音界面）：realtime=实时 / queue=队列（按停顿切句）/ time=时间（每 N 秒切）
+let rtInferType = 'queue';
+let rtTimeSec = 5;  // 时间推理的切分秒数
+let rtPrioValue = 0x20;  // 记住的优先级（0x20=正常），开始变音时自动应用
+function rtInferTypeSyncUI() {
+  const s = $('rtInferType');
+  if (s) s.value = rtInferType;
+}
+function rtInferTypeSave() {
+  try {
+    const rc = Object.assign({}, (state.settings && state.settings.rtConfig) || {}, { inferType: rtInferType, timeSec: rtTimeSec });
+    window.rpc.saveSettings({ rtConfig: rc });
+  } catch (e) { }
+}
+function rtShowTimePopup() {
+  const old = $('rtTimePop');
+  if (old) old.remove();
+  const pop = document.createElement('div');
+  pop.id = 'rtTimePop';
+  pop.style.cssText = 'position:fixed;z-index:1200;left:50%;top:40%;transform:translate(-50%,-50%);width:260px;background:#fff;border:1px solid #d3dbf0;border-radius:12px;box-shadow:0 8px 30px rgba(20,30,60,.25);padding:14px';
+  pop.innerHTML = '<div style="font-size:13px;color:#334;margin-bottom:10px">时间推理：每 <b id="rtTimeVal">' + rtTimeSec + '</b> 秒切一段</div>'
+    + '<input id="rtTimeInput" type="number" min="1" max="30" step="1" value="' + rtTimeSec + '" style="width:100%;box-sizing:border-box;padding:7px 9px;border:1px solid #d3dbf0;border-radius:8px;font-size:14px">'
+    + '<div style="display:flex;gap:8px;margin-top:10px;justify-content:flex-end">'
+    + '<button id="rtTimeOk" type="button" style="padding:6px 14px;border:none;border-radius:8px;background:linear-gradient(90deg,var(--ac2),var(--ac));color:#fff;cursor:pointer;font-size:13px">确定</button>'
+    + '<button id="rtTimeCancel" type="button" style="padding:6px 12px;border:1px solid #d3dbf0;border-radius:8px;background:#fff;color:#556;cursor:pointer;font-size:13px">取消</button>'
+    + '</div>';
+  document.body.appendChild(pop);
+  const inp = $('rtTimeInput');
+  if (inp) { inp.focus(); inp.select(); }
+  const ok = $('rtTimeOk');
+  const cancel = $('rtTimeCancel');
+  if (ok) ok.onclick = () => {
+    const v = parseInt(inp ? inp.value : '5', 10);
+    rtTimeSec = (isNaN(v) || v < 1) ? 5 : Math.min(30, v);
+    rtInferTypeSave();
+    pop.remove();
+  };
+  if (cancel) cancel.onclick = () => { pop.remove(); };
+}
+function rtInferTypeChange() {
+  const s = $('rtInferType');
+  if (!s) return;
+  rtInferType = s.value;
+  if (rtInferType === 'time') { rtShowTimePopup(); }
+  rtExtResetCells();
+  rtInferTypeSave();
+}
+if ($('rtInferType')) $('rtInferType').onchange = rtInferTypeChange;
 async function rtToggle() {
   const btn = $('rtBtn');
   if (rtRunning) {
@@ -1602,7 +1912,7 @@ async function rtToggle() {
   const v = (state && state.voices && state.voices[rtSelIdx]) || (state && state.voices && state.voices[0]) || null;
   if (!v || !v.pth) { toast('请先在「选择声线」里选一个声线包', 4000); return; }
   const cfg = {
-    mode: 'rvc',
+    mode: $('rtMode') ? $('rtMode').value : 'rvc',
     pthPath: v.pth,
     indexPath: v.idx || '',
     indexRate: parseFloat($('rtRate') ? $('rtRate').value : 0.75),
@@ -1612,9 +1922,9 @@ async function rtToggle() {
     outputDevice: $('rtOut').value === '' ? null : parseInt($('rtOut').value, 10),
     sampleRate: parseInt($('rtSr').value, 10),
     blockSize: parseInt($('rtBlock').value, 10),
-    gain: parseFloat($('rtGain').value),
     f0method: $('rtF0') ? $('rtF0').value : 'rmvpe',
     torch_threads: $('rtTh') ? $('rtTh').value : '1',
+    inferType: rtInferType, timeSec: rtTimeSec,
   };
   btn.disabled = true;
   rtSetState('启动中…', false);
@@ -1625,6 +1935,7 @@ async function rtToggle() {
     rtSetState('启动失败', false);
     rtLog('✗ ' + ((r && r.msg) || '未知错误'));
     toast('实时变声启动失败：' + ((r && r.msg) || ''), 5000);
+    startSpectrum();
     return;
   }
   rtRunning = true;
@@ -1632,7 +1943,7 @@ async function rtToggle() {
   await window.rpc.saveSettings({
     rtConfig: {
       inputDevice: cfg.inputDevice, outputDevice: cfg.outputDevice,
-      sampleRate: cfg.sampleRate, blockSize: cfg.blockSize, gain: cfg.gain,
+      sampleRate: cfg.sampleRate, blockSize: cfg.blockSize, mode: cfg.mode,
       f0upKey: cfg.f0upKey, indexRate: cfg.indexRate, formant: cfg.formant,
       f0method: cfg.f0method, torch_threads: cfg.torch_threads,
     },
@@ -1674,27 +1985,332 @@ function rtPlayRecord() {
 }
 $('rtRecBtn').onclick = rtRecord;
 $('rtPlayBtn').onclick = rtPlayRecord;
+// ── 右侧扩展侧栏（声线频率 / 块状态 / 数据 / 调试日志） ──
+const RT_EXT = { running: false, cells: [], maxCells: 128 };
+let rtBatch = [];  // 块状态批缓冲：攒满一批（块大小对应格数）后整屏刷新
+function dbgLog(msg, cat) {
+  const el = $('dbgLog');
+  if (!el) return;
+  const d0 = new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  const ts = p(d0.getHours()) + ':' + p(d0.getMinutes()) + ':' + p(d0.getSeconds());
+  const d = document.createElement('div');
+  d.className = 'dbg-line' + (cat ? ' dbg-' + cat : '');
+  d.textContent = '[' + ts + '] ' + msg;
+  el.appendChild(d);
+  while (el.children.length > 300) el.removeChild(el.firstChild);
+  el.scrollTop = el.scrollHeight;
+}
+function rtExtToggle() {
+  document.body.classList.toggle('ext-open');
+  const open = document.body.classList.contains('ext-open');
+  $('rtExtBtn').textContent = open ? '▶' : '◀';
+  try { window.rpc.extResize(open); } catch (e) { }
+}
+if ($('rtExtBtn')) $('rtExtBtn').onclick = rtExtToggle;
+// 自定义标题栏窗口控制
+if ($('tbMin')) $('tbMin').onclick = () => { try { window.rpc.winMin(); } catch (e) { } };
+if ($('tbMax')) $('tbMax').onclick = () => { try { window.rpc.winMax(); } catch (e) { } };
+if ($('tbClose')) $('tbClose').onclick = () => { try { window.rpc.winClose(); } catch (e) { } };
+function rtExtBlkCount(blockSize) {
+  const b = parseInt(blockSize, 10) || 1024;
+  // 块越大观察窗口越长：2048→256 格、1024→128 格、512→64 格
+  return b >= 2048 ? 256 : (b >= 1024 ? 128 : 64);
+}
+function rtExtResetCells() {
+  RT_EXT.maxCells = rtExtBlkCount(($('rtBlock') && $('rtBlock').value) || '1024');
+  RT_EXT.cells = [];
+  rtBatch = [];
+  rtBlkDraw();
+}
+let specHist = [];  // 频谱历史：每帧 {val:[6], active:bool}
+function rtSpecDraw(bins, active) {
+  const cv = $('specCanvas');
+  if (!cv) return;
+  const ctx = cv.getContext('2d');
+  const W = cv.width, H = cv.height, N = 6;
+  const val = [];
+  for (let i = 0; i < N; i++) val.push(bins && bins[i] ? bins[i] : 0);
+  specHist.push({ val: val, active: !!active });
+  while (specHist.length > W) specHist.shift();
+
+  ctx.clearRect(0, 0, W, H);
+
+  // 基准线在 2/3 处：静音(v=0)时线正好落在基准线上，能量越大越往上。逐帧按当时的 active 上色（渐进变蓝）。
+  const baseline = H * 2 / 3;
+  const amp = baseline - 4;
+  for (let b = 0; b < N; b++) {
+    const main = b === 0;
+    const alpha = main ? 0.92 : Math.max(0.18, 0.55 - b * 0.075);
+    ctx.lineWidth = main ? 1.8 : 1;
+    for (let x = 0; x < specHist.length; x++) {
+      const f = specHist[x];
+      const v = f.val[b] / 100;
+      const y = baseline - v * amp;
+      ctx.strokeStyle = (f.active ? 'rgba(96,190,255,' : 'rgba(30,32,46,') + alpha.toFixed(3) + ')';
+      ctx.beginPath();
+      if (x > 0) {
+        const f0 = specHist[x - 1];
+        const y0 = baseline - (f0.val[b] / 100) * amp;
+        ctx.moveTo(x - 1, y0);
+      } else {
+        ctx.moveTo(x, y);
+      }
+      ctx.lineTo(x, y);
+      ctx.stroke();
+    }
+  }
+}
+const BLK_COLORS = { 0: '#3ecf7a', 1: '#e25b6e', 2: '#8a90a3', 3: '#ffffff' };
+function rtBlkDraw() {
+  const cv = $('blkCanvas');
+  if (!cv) return;
+  const ctx = cv.getContext('2d');
+  const max = RT_EXT.maxCells || 128;
+  const W = cv.width, H = 144;  // 画布固定 3:2，格子随格数自适应（格多格子小、格少格子大）
+  const cols = Math.max(1, Math.ceil(Math.sqrt(max)));  // 尽量方正的列数
+  const rows = Math.ceil(max / cols);
+  const stepX = W / cols;
+  const stepY = H / rows;
+  const cs = Math.max(1, Math.min(stepX, stepY) - 1);
+  cv.height = H;
+  ctx.clearRect(0, 0, W, H);
+  for (let i = 0; i < max; i++) {
+    const x = (i % cols) * stepX;
+    const y = Math.floor(i / cols) * stepY;
+    const code = RT_EXT.cells[i];
+    if (code === 0 || code === 1 || code === 2) {
+      ctx.fillStyle = BLK_COLORS[code] || '#8a90a3';
+      ctx.fillRect(x, y, cs, cs);
+    } else {
+      // 不变（含还没处理的空格子）：白色 + 浅描边，网格常驻显示
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(x, y, cs, cs);
+      ctx.strokeStyle = '#d0d6e8';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x + 0.5, y + 0.5, cs - 1, cs - 1);
+    }
+  }
+}
+function rtExtPushCodes(codes) {
+  if (!codes || !codes.length) return;
+  if (rtInferType !== 'realtime') {
+    // 队列模式：每个段落一个格子，流式显示（最新在前），格数 16
+    for (const c of codes) {
+      RT_EXT.cells.unshift(c);
+      if (RT_EXT.cells.length > 16) RT_EXT.cells.length = 16;
+    }
+    rtBlkDraw();
+    return;
+  }
+  for (const c of codes) {
+    rtBatch.push(c);
+    // 攒满一批（块大小对应格数）后整屏刷新一次
+    if (rtBatch.length >= RT_EXT.maxCells) {
+      RT_EXT.cells = rtBatch.slice(0, RT_EXT.maxCells);
+      rtBatch = [];
+      rtBlkDraw();
+    }
+  }
+}
+function rtExtSetMetric(id, txt, color) {
+  const el = $(id);
+  if (!el) return;
+  el.textContent = txt;
+  el.style.color = color || '';
+}
+// 优先级设置菜单（设置变音 worker 进程优先级）
+const PRIO_OPTIONS = [['实时', 0x100], ['高', 0x80], ['偏高', 0x8000], ['正常', 0x20], ['偏低', 0x4000], ['低', 0x40]];
+function rtExtPrioMenu() {
+  const old = $('prioMenu');
+  if (old) { old.remove(); return; }
+  const anchor = $('exPrioRow');
+  if (!anchor) return;
+  const menu = document.createElement('div');
+  menu.id = 'prioMenu';
+  menu.style.cssText = 'position:fixed;z-index:9999;background:#fff;border:1px solid #c9d4ee;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.18);padding:4px;min-width:90px';
+  const r = anchor.getBoundingClientRect();
+  menu.style.left = Math.max(4, Math.round(r.left)) + 'px';
+  menu.style.top = Math.round(r.bottom + 4) + 'px';
+  PRIO_OPTIONS.forEach((arr) => {
+    const it = document.createElement('div');
+    it.style.cssText = 'padding:6px 12px;font-size:12px;color:#445;border-radius:6px;cursor:pointer';
+    it.textContent = arr[0];
+    it.onmouseenter = () => { it.style.background = '#f0f4ff'; };
+    it.onmouseleave = () => { it.style.background = ''; };
+    it.onclick = () => {
+      rtPrioValue = arr[1];
+      rtExtSetMetric('exPrio', arr[0]);  // 本地先显示选择结果
+      try {
+        const rc = Object.assign({}, (state.settings && state.settings.rtConfig) || {}, { priority: rtPrioValue });
+        window.rpc.saveSettings({ rtConfig: rc });
+      } catch (e) { }
+      if (rtRunning) {
+        try { window.rpc.realtimeCmd({ cmd: 'priority', value: rtPrioValue }); } catch (e) { }
+      } else {
+        dbgLog('优先级已记忆为：' + arr[0] + '（开始变音后自动应用）', 'ok');
+      }
+      menu.remove();
+    };
+    menu.appendChild(it);
+  });
+  document.body.appendChild(menu);
+  setTimeout(() => {
+    document.addEventListener('click', function _h(e) {
+      if (!menu.contains(e.target) && e.target !== anchor && !anchor.contains(e.target)) {
+        menu.remove();
+        document.removeEventListener('click', _h);
+      }
+    });
+  }, 0);
+}
+if ($('exPrioRow')) $('exPrioRow').onclick = rtExtPrioMenu;
+rtExtResetCells();
+rtSpecDraw(null, false);  // 初始画一条静音基线
+// 侧栏顶部贴住顶栏实际下边缘（避免不同主题/缩放下凸出或错位）
+function rtExtFixTop() {
+  try {
+    const h = document.querySelector('header');
+    const bar = $('rtExtBar');
+    if (h && bar) bar.style.top = Math.round(h.getBoundingClientRect().bottom) + 'px';
+  } catch (e) { }
+}
+rtExtFixTop();
+window.addEventListener('resize', rtExtFixTop);
+// 声线频率：始终监听麦克风（WebAudio），不依赖变音开关；变音时释放麦克风给 worker
+let _specCtx = null, _specAnalyser = null, _specRaf = null, _micStream = null;
+function stopSpectrum() {
+  try {
+    if (_specRaf) { cancelAnimationFrame(_specRaf); _specRaf = null; }
+    if (_micStream) { try { _micStream.getTracks().forEach((t) => t.stop()); } catch (e) { } _micStream = null; }
+    _specAnalyser = null;
+    if (_specCtx) { try { _specCtx.close(); } catch (e) { } _specCtx = null; }
+  } catch (e) { }
+}
+function startSpectrum() {
+  try {
+    if (_micStream || _specCtx) return;  // 已在监听
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) return;
+    navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } })
+      .then((stream) => {
+        try {
+          _micStream = stream;
+          const AC = window.AudioContext || window.webkitAudioContext;
+          _specCtx = new AC();
+          _specAnalyser = _specCtx.createAnalyser();
+          _specAnalyser.fftSize = 4096;
+          _specAnalyser.smoothingTimeConstant = 0.55;
+          _specCtx.createMediaStreamSource(stream).connect(_specAnalyser);
+          specLoop();
+        } catch (e) { }
+      })
+      .catch(() => { });
+  } catch (e) { }
+}
+function specLoop() {
+  try {
+    if (_specAnalyser) {
+      const N = 6;
+      const buf = new Uint8Array(_specAnalyser.frequencyBinCount);
+      _specAnalyser.getByteFrequencyData(buf);
+      const sr = _specCtx.sampleRate || 48000;
+      const binHz = (sr / 2) / buf.length;
+      const fmax = Math.min(12000, sr / 2 - 1);
+      const lo = Math.log(60), hi = Math.log(Math.max(fmax, 120));
+      const bins = new Array(N).fill(0);
+      for (let i = 0; i < N; i++) {
+        const a = Math.exp(lo + (hi - lo) * i / N);
+        const b = Math.exp(lo + (hi - lo) * (i + 1) / N);
+        const ia = Math.floor(a / binHz), ib = Math.ceil(b / binHz);
+        let v = 0;
+        for (let j = ia; j <= ib && j < buf.length; j++) if (buf[j] > v) v = buf[j];
+        bins[i] = v / 255 * 100;
+      }
+      if (!RT_EXT.running) rtSpecDraw(bins, false);  // 未变音时用 WebAudio 频谱
+    }
+  } catch (e) { }
+  _specRaf = requestAnimationFrame(specLoop);
+}
+startSpectrum();
+// 停止变音后重置数据面板
+function rtExtResetMetrics() {
+  rtExtSetMetric('exLat', '—');
+  rtExtSetMetric('exConv', '—');
+  rtExtSetMetric('exLoad', '—');
+  rtExtSetMetric('exStab', '—');
+  rtExtSetMetric('exStatus', '—');
+  // exPrio 常驻显示，停止时不重置
+}
+if ($('rtBlock')) {
+  $('rtBlock').addEventListener('change', rtExtResetCells);
+}
 window.rpc.onRealtimeStatus((d) => {
   if (!d || !d.type) return;
-  if (d.type === 'level') {
+  if (d.type === 'rt-stat') {
     const mi = $('rtMIn'), mo = $('rtMOut');
     if (mi) mi.style.width = Math.min(100, Math.round(Math.sqrt(d.in || 0) * 130)) + '%';
     if (mo) mo.style.width = Math.min(100, Math.round(Math.sqrt(d.out || 0) * 130)) + '%';
-    if (d.inferMs) rtLog('推理耗时 ' + d.inferMs + 'ms｜削减波 ' + d.clip + ' 次' + (d.under ? '｜丢块 ' + d.under : ''));
-  } else if (d.type === 'status') {
+    rtSpecDraw(d.bins, RT_EXT.running);
+    rtExtPushCodes(d.codes);
+    rtExtSetMetric('exLat', (d.lat != null ? d.lat : '—') + ' ms');
+    rtExtSetMetric('exConv', (d.conv != null ? d.conv : '—') + '%');
+    rtExtSetMetric('exLoad', (d.load != null ? d.load : '—') + '%');
+    rtExtSetMetric('exStab', (d.stability != null ? d.stability : '—') + '%');
+    rtExtSetMetric('exStatus', d.status || '—', d.status === '正常' ? '#2f9d5c' : (d.status === '过载' ? '#c98a1f' : '#c04a63'));
+    rtExtSetMetric('exPrio', d.priority || '正常');
+    const now = Date.now();
+    if (!RT_EXT._lastStat || now - RT_EXT._lastStat >= 1000) {
+      RT_EXT._lastStat = now;
+      dbgLog('输入 ' + (d.in != null ? Number(d.in).toFixed(4) : '—') + '｜已播 ' + (d.played != null ? d.played : '0') + 's｜单块用时 ' + (d.lat != null ? d.lat : '—') + 'ms｜转换率 ' + (d.conv != null ? d.conv : '—') + '%｜状态 ' + (d.status || '—') + '｜优先级 ' + (d.priority || '—'), 'in');
+    }
+  } else if (d.type === 'level') {
+    const mi = $('rtMIn'), mo = $('rtMOut');
+    if (mi && d.in != null) mi.style.width = Math.min(100, Math.round(Math.sqrt(d.in || 0) * 130)) + '%';
+    if (mo && d.out != null) mo.style.width = Math.min(100, Math.round(Math.sqrt(d.out || 0) * 130)) + '%';
+  } else if (d.type === 'log') {
+    dbgLog(String(d.msg || ''));
+    rtLog(String(d.msg || ''));
+  } else if (d.type === 'status' || d.type === 'ready') {
     if (d.state === 'running') {
       rtSetState('运行中 · ' + (d.mode === 'rvc' ? '声线模式' : '音效模式'), true);
-      rtLog('✓ 已启动｜' + (d.device || '') + '｜' + (d.sampleRate || '') + 'Hz｜块 ' + (d.blockFrame || '') + (d.loadSec ? '｜模型加载 ' + d.loadSec + 's' : ''));
+      RT_EXT.running = true;
+      stopSpectrum();  // 释放麦克风给 worker 的 PortAudio
+      // 应用记住的优先级（worker 就绪后自动设）
+      setTimeout(() => {
+        if (rtPrioValue) { try { window.rpc.realtimeCmd({ cmd: 'priority', value: rtPrioValue }); } catch (e) { } }
+      }, 600);
+      const _sr = d.sampleRate || d.inputRate || '';
+      const _blk = d.blockFrame || d.blockSize || '';
+      rtLog('✓ 已启动｜' + (_sr ? (_sr + 'Hz') : '') + (_blk ? ('｜块 ' + _blk) : '') + (d.loadSec ? '｜模型加载 ' + d.loadSec + 's' : ''));
+      dbgLog('已启动｜' + (_sr ? (_sr + 'Hz') : '—') + (_blk ? ('｜块 ' + _blk) : ''), 'ok');
     }
-    else if (d.state === 'loading') { rtSetState('加载模型…', false); rtLog(d.message || '正在加载…'); }
-    else if (d.state === 'starting') { rtSetState('启动中…', false); }
-    else if (d.state === 'preset') { rtSetState('运行中 · ' + (d.preset || ''), true); rtLog('已切换预设：' + (d.preset || '')); }
+    else if (d.state === 'loading') { rtSetState('加载模型…', false); rtLog(d.message || '正在加载…'); dbgLog('加载：' + (d.message || '')); }
+    else if (d.state === 'opening-audio') { stopSpectrum(); rtSetState('打开音频设备…', false); dbgLog('打开音频设备（已释放麦克风）'); }
+    else if (d.state === 'starting') { rtSetState('启动中…', false); dbgLog('启动中…'); }
+    else if (d.state === 'preset') { rtSetState('运行中 · ' + (d.preset || ''), true); rtLog('已切换预设：' + (d.preset || '')); dbgLog('预设切换：' + (d.preset || '')); }
     else if (d.state === 'gain') { rtSetState('运行中', true); }
-    else if (d.state === 'stopped') { rtSetState('已停止', false); rtRunning = false; const b = $('rtBtn'); if (b) b.textContent = '▶ 开始实时变声'; }
-    else if (d.state === 'exited') { rtRunning = false; rtSetState('已退出', false); const b = $('rtBtn'); if (b) b.textContent = '▶ 开始实时变声'; }
+    else if (d.state === 'stopped') {
+      rtSetState('已停止', false); rtRunning = false; RT_EXT.running = false; RT_EXT.cells = []; rtBatch = []; rtBlkDraw(); rtExtResetMetrics();
+      startSpectrum();  // 恢复 WebAudio 频谱
+      const b = $('rtBtn'); if (b) b.textContent = '▶ 开始变音';
+      dbgLog('已停止', 'warn');
+    }
+    else if (d.state === 'exited') {
+      rtRunning = false; RT_EXT.running = false; RT_EXT.cells = []; rtBatch = []; rtBlkDraw(); rtExtResetMetrics();
+      startSpectrum();
+      rtSetState('已退出', false);
+      const b = $('rtBtn'); if (b) b.textContent = '▶ 开始变音';
+      dbgLog('已退出（code=' + d.code + '）', 'warn');
+    }
+  } else if (d.type === 'prio') {
+    rtExtSetMetric('exPrio', d.priority || '正常');
+    dbgLog('优先级已设为：' + (d.priority || '正常'), 'ok');
   } else if (d.type === 'error') {
     rtLog('✗ ' + d.msg);
     toast('实时变声：' + d.msg, 5000);
+    dbgLog('✗ ' + d.msg, 'err');
+  } else if (d.type === 'stderr') {
+    dbgLog('[stderr] ' + String(d.msg || '').slice(0, 300), 'err');
   }
 });
 const _rtK = $('rtPitch');
@@ -1709,13 +2325,6 @@ if (_rtIR) {
   _rtIR.addEventListener('change', () => {
     const v3 = parseFloat(_rtIR.value);
     if (rtRunning && !isNaN(v3)) window.rpc.realtimeCmd({ cmd: 'indexRate', value: v3 });
-  });
-}
-const _rtG = $('rtGain');
-if (_rtG) {
-  _rtG.addEventListener('change', () => {
-    const v = parseFloat(_rtG.value);
-    if (rtRunning && !isNaN(v)) window.rpc.realtimeCmd({ cmd: 'gain', value: v });
   });
 }
 function openPlaza() { window.rpc.openPlaza().then((r) => { if (r && !r.ok) toast(r.msg, 4000); }); }
@@ -2066,7 +2675,7 @@ function cropVoiceCover(name, dataUrl) {
       const rc = (state.settings && state.settings.rtConfig) || {};
       if (rc.sampleRate) $('rtSr').value = String(rc.sampleRate);
       if (rc.blockSize) $('rtBlock').value = String(rc.blockSize);
-      if (rc.gain) { $('rtGain').value = String(rc.gain); }
+      if (rc.gain) { /* 输出增益已移除 */ }
       rtPresetId = (state.settings && state.settings.rtPreset) || '';
       rtRenderVoices();
       if (rc.f0upKey != null && $('rtPitch')) { $('rtPitch').value = String(rc.f0upKey); }
@@ -2074,6 +2683,11 @@ function cropVoiceCover(name, dataUrl) {
       if (rc.formant != null && $('rtFormant')) { $('rtFormant').value = String(rc.formant); }
       if (rc.f0method && $('rtF0')) { $('rtF0').value = String(rc.f0method); }
       if (rc.torch_threads && $('rtTh')) { $('rtTh').value = String(rc.torch_threads); }
+      if (rc.inferType != null) { rtInferType = String(rc.inferType); }
+      if (rc.timeSec != null) { rtTimeSec = rc.timeSec; }
+      if (rc.priority != null) { rtPrioValue = rc.priority; rtExtSetMetric('exPrio', {0x100:'实时',0x80:'高',0x8000:'偏高',0x20:'正常',0x4000:'偏低',0x40:'低'}[rc.priority] || '正常'); }
+      if (rc.mode && $('rtMode')) { $('rtMode').value = String(rc.mode); }
+      rtInferTypeSyncUI();
       const wantName = (state.settings && state.settings.rtVoice) || '';
       if (wantName && state.voices) {
         const vi = state.voices.findIndex((x) => x.name === wantName);
@@ -2504,6 +3118,20 @@ if ($('gameList')) {
     b.onclick = () => { startGame(b.dataset.g); $('gameHost').scrollIntoView({ behavior: 'smooth', block: 'nearest' }); };
   });
 }
+
+// 开源社区弹窗
+function showCommunity() {
+  const ov = document.createElement('div');
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(15,18,30,.55);z-index:99999;display:flex;align-items:center;justify-content:center;padding:20px';
+  const img = document.createElement('img');
+  img.src = 'assets/1130474363.jpg';
+  img.style.cssText = 'max-width:84vw;max-height:84vh;border-radius:12px;box-shadow:0 20px 60px rgba(0,0,0,.35)';
+  img.onclick = () => ov.remove();
+  ov.appendChild(img);
+  ov.onclick = (e) => { if (e.target === ov) ov.remove(); };
+  document.body.appendChild(ov);
+}
+if ($('communityBtn')) $('communityBtn').onclick = showCommunity;
 
 // 原作者
 const AUTHORS = [

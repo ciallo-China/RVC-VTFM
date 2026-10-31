@@ -1,5 +1,5 @@
 // main.js - RVC 声线转音 主进程（便携版）
-const { app, BrowserWindow, ipcMain, dialog, shell, protocol, net } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, protocol, net, screen } = require('electron');
 const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
@@ -522,6 +522,7 @@ function createWindow() {
   win = new BrowserWindow({
     width: 1120, height: 760, minWidth: 940, minHeight: 640,
     title: 'RVC 声线转音',
+    frame: false,
     backgroundColor: '#ffffff',
     autoHideMenuBar: true,
     icon: path.join(__dirname, 'assets', 'app.png'),
@@ -1915,6 +1916,14 @@ ipcMain.handle('realtime-stop', () => {
     return { ok: true };
   } catch (err) { return { ok: false, msg: err.message }; }
 });
+// 扩展侧栏：在窗口内占右侧区域，主界面由 CSS margin-right 让位，窗口本身不变宽（避免超屏导致窗口左移）
+ipcMain.handle('ext-resize', () => {
+  return { ok: true };
+});
+// 自定义标题栏窗口控制
+ipcMain.handle('win-min', () => { try { if (win) win.minimize(); } catch (e) { } return { ok: true }; });
+ipcMain.handle('win-max', () => { try { if (win) { if (win.isMaximized()) win.unmaximize(); else win.maximize(); } } catch (e) { } return { ok: true }; });
+ipcMain.handle('win-close', () => { try { if (win) win.close(); } catch (e) { } return { ok: true }; });
 
 const plazaImgCache = new Map();
 ipcMain.handle('plaza-img', async (e, u) => {
